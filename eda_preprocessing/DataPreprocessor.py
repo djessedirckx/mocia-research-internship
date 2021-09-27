@@ -5,6 +5,7 @@ from pathlib import Path
 from tqdm import tqdm
 from typing import Tuple
 
+
 class DataPreprocessor():
 
     def __init__(self, input_path: Path, label_forwarding: bool):
@@ -53,10 +54,10 @@ class DataPreprocessor():
         non_truncated_events = original_df.loc[original_df['DX_bl'] != 'AD']
 
         # Select desired columns
-        desired_columns = ['PTID', 'DX', 'AGE', 'APOE4', 'PTEDUCAT', 'PTETHCAT', 'PTGENDER', 'PTMARRY', 
-                   'PTRACCAT', 'Entorhinal', 'Fusiform', 'Hippocampus', 'ICV', 'MidTemp', 'Ventricles', 
-                   'WholeBrain', 'ADAS11', 'ADAS13', 'CDRSB', 'MMSE', 'RAVLT_forgetting', 
-                   'RAVLT_immediate', 'RAVLT_learning', 'RAVLT_perc_forgetting', 'Month']
+        desired_columns = ['PTID', 'DX', 'AGE', 'APOE4', 'PTEDUCAT', 'PTETHCAT', 'PTGENDER', 'PTMARRY',
+                           'PTRACCAT', 'Entorhinal', 'Fusiform', 'Hippocampus', 'ICV', 'MidTemp', 'Ventricles',
+                           'WholeBrain', 'ADAS11', 'ADAS13', 'CDRSB', 'MMSE', 'RAVLT_forgetting',
+                           'RAVLT_immediate', 'RAVLT_learning', 'RAVLT_perc_forgetting', 'Month']
 
         study_df = non_truncated_events[desired_columns]
         study_df.columns = desired_columns
@@ -73,22 +74,27 @@ class DataPreprocessor():
         # Set all missing values to 1, present values to 0
         missing_masks = missing_masks.isnull().astype('int')
 
-        assert (missing_masks == 1).equals(feature_set.isna()), 'Ḿasking is incorrect'
+        assert (missing_masks == 1).equals(
+            feature_set.isna()), 'Ḿasking is incorrect'
 
         # Apply one-hot encoding on categorical features
         # One-hot encode categorical features
         ohe_features = None
 
         for column in feature_set.columns[3:7]:
-            encoded_feature = pd.get_dummies(feature_set[column], prefix=column, dummy_na=True)
-            
+            encoded_feature = pd.get_dummies(
+                feature_set[column], prefix=column, dummy_na=True)
+
             # Encode missing values as all ones
-            encoded_feature.loc[encoded_feature[f'{column}_nan'] == 1] = np.ones(encoded_feature.shape[1])
-            
+            encoded_feature.loc[encoded_feature[f'{column}_nan'] == 1] = np.ones(
+                encoded_feature.shape[1])
+
             # Encode present values as all zeros
-            encoded_feature.loc[encoded_feature[f'{column}_nan'] == 1] = np.zeros(encoded_feature.shape[1])
-            
-            ohe_features = pd.concat([ohe_features, encoded_feature.iloc[:, :-1]], axis=1)
+            encoded_feature.loc[encoded_feature[f'{column}_nan'] == 1] = np.zeros(
+                encoded_feature.shape[1])
+
+            ohe_features = pd.concat(
+                [ohe_features, encoded_feature.iloc[:, :-1]], axis=1)
 
         # Concat one-hot encoded features and drop original categorical columns
         missing_masks = pd.concat([missing_masks, ohe_features], axis=1)
@@ -102,22 +108,24 @@ class DataPreprocessor():
         # Use zero-order interpolation on the data (execute per patient)
         for pt in tqdm(study_df['PTID'].unique()):
             events = study_df.loc[study_df['PTID'] == pt]
-            feature_set.loc[events.index, feature_set.columns] = events[feature_set.columns].fillna(method='ffill')
+            feature_set.loc[events.index, feature_set.columns] = events[feature_set.columns].fillna(
+                method='ffill')
 
         # Fill remaining numerical column nan values with mean of all measurements
         for column in feature_set.columns[np.r_[0, 2:3, 7:22]]:
-            feature_set[column].fillna(feature_set[column].mean(), inplace=True)
+            feature_set[column].fillna(
+                feature_set[column].mean(), inplace=True)
 
         # Apply data imputation on APOE4 column. Values are replaced based on their probability of occurence
         apoe4_stats = feature_set['APOE4'].value_counts()
         apoe4_stats = apoe4_stats / len(feature_set)
-        
+
         rng = np.random.default_rng(seed=42)
         nan_apoe_rows = feature_set.index[feature_set['APOE4'].isna()]
 
         for nan_apoe in nan_apoe_rows:
             rnd = rng.random()
-            
+
             if rnd < apoe4_stats[0]:
                 feature_set.loc[nan_apoe, 'APOE4'] = 0
             elif rnd >= apoe4_stats[0] and rnd <= apoe4_stats[1]:
@@ -131,11 +139,13 @@ class DataPreprocessor():
         print('Normalising and encoding data...')
         # Normalize numerical features
         for column in feature_set.columns[np.r_[0:3, 7:22]]:
-            feature_set[column] = (feature_set[column] - feature_set[column].mean()) / feature_set[column].std()
+            feature_set[column] = (
+                feature_set[column] - feature_set[column].mean()) / feature_set[column].std()
 
         # One-hot encode categorical features
         for column in feature_set.columns[3:7]:
-            feature_set = pd.concat([feature_set, pd.get_dummies(feature_set[column], prefix=column)], axis=1)
+            feature_set = pd.concat([feature_set, pd.get_dummies(
+                feature_set[column], prefix=column)], axis=1)
 
         # Drop categorical columns
         feature_set = feature_set.drop(feature_set.columns[3:7], axis=1)
@@ -156,11 +166,11 @@ class DataPreprocessor():
 
             # Get indexes of measurements after first stable diagnosis
             forwarding_indexes = events.index[events.index > ad_index]
-            
+
             # Remove all measurements after first stable diagnosis
             if len(forwarding_indexes) > 0:
                 study_df = study_df.drop(index=forwarding_indexes)
                 counter += len(forwarding_indexes)
-        
+
         print(f'Removed {counter} redundant timesteps')
         return study_df
