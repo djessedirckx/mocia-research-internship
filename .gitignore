@@ -3,3 +3,4 @@ tadpole_challenge
 
 # Python stuff
 .ipynb_checkpoints
+*.pyc
