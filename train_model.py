@@ -12,6 +12,7 @@ def main():
     # Make label binary, mark all Dementia instances as positive
     study_df['DX'] = study_df['DX'].replace('Dementia', 1)
     study_df['DX'] = study_df['DX'].replace(['MCI', 'NL', 'MCI to Dementia', 'NL to MCI', 'MCI to NL', 'Dementia to MCI', 'NL to Dementia'], 0)
+    study_df['DX'].fillna(0, inplace=True)
 
     labels, feature_windows, mask_windows = data_creator.create_training_data(study_df, missing_masks)
 
