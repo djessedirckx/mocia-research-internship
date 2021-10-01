@@ -11,13 +11,15 @@ class TrainingDataCreator():
         self.window_length = window_length
         self.prediction_horizon = prediction_horizon
 
-    def create_training_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame) -> Tuple[np.array, np.array, np.array]:
-        labels, feature_window_set, mask_window_set = [], [], []
+    def create_training_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame) -> Tuple[np.array, np.array, np.array, np.array, np.array]:
+        patients, horizon_labels, measurement_labels, feature_window_set, mask_window_set = [], [], [], [], []
 
         print('Creating training data...')
 
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
+            patients.append(name)
+
             traj_labels = trajectory['DX'].values
             mod = traj_labels.shape[0] % self.prediction_horizon
             max_divisble = traj_labels.shape[0] - mod
@@ -45,11 +47,12 @@ class TrainingDataCreator():
                 traj_windows.append(traj_features[i:i+self.prediction_horizon+1, :])
                 mask_windows.append(masks_features[i:i+self.prediction_horizon+1, :])
 
-            labels.extend(pred_horizons)
-            feature_window_set.extend(traj_windows)
-            mask_window_set.extend(mask_windows)
+            horizon_labels.append(1) if 1 in pred_horizons else horizon_labels.append(0)
+            measurement_labels.append(pred_horizons)
+            feature_window_set.append(traj_windows)
+            mask_window_set.append(mask_windows)
 
-        return np.array(labels), np.array(feature_window_set), np.array(mask_window_set)
+        return np.array(patients), np.array(horizon_labels), np.array(measurement_labels, dtype='object'), np.array(feature_window_set, dtype='object'), np.array(mask_window_set, dtype='object')
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
         traj_features = trajectory.iloc[:, 2:-1].values
