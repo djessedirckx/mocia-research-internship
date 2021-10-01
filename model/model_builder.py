@@ -2,7 +2,7 @@ from tensorflow.keras.layers import Conv1D, Dense, Dropout, Concatenate, Input
 from tensorflow.keras.losses import CategoricalCrossentropy
 from tensorflow.keras.models import Model
 
-from MatchNetConfig import MatchNetConfig
+from model.MatchNetConfig import MatchNetConfig
 
 
 def build_model(config: MatchNetConfig) -> Model:

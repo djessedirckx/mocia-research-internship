@@ -43,6 +43,10 @@ class DataPreprocessor():
         if not self.label_forwarding:
             study_df = self.remove_timesteps(study_df)
 
+        # Reset index of both dataframes
+        study_df.reset_index(inplace=True)
+        missing_masks.reset_index(inplace=True)
+
         print('Finished initial pre-processing of the data')
         return study_df, missing_masks
 
