@@ -5,13 +5,14 @@ import tensorflow as tf
 from tensorflow.keras import optimizers
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import CategoricalCrossentropy
+from tensorflow.keras.utils import Progbar
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.TrainingDataCreator import TrainingDataCreator
 from model.model_builder import build_model
 
-def train(epochs: int, batch_size: int):
+def train(folds, epochs: int, batch_size: int):
 
     input_file = 'tadpole_challenge/TADPOLE_D1_D2.csv'
     data_preprocessor = DataPreprocessor(input_file, label_forwarding=False)
@@ -31,7 +32,8 @@ def train(epochs: int, batch_size: int):
     patients, horizon_labels, measurement_labels, feature_windows, mask_windows = data_creator.create_training_data(study_df, missing_masks)
     kfold_split = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-    for train_idx, test_idx in kfold_split.split(feature_windows, horizon_labels):
+    print('Start training')
+    for fold_step, (train_idx, test_idx) in enumerate(kfold_split.split(feature_windows, horizon_labels)):
         train_horizon_labels = horizon_labels[train_idx]
 
         # Split train fold into train and validation data
@@ -51,15 +53,25 @@ def train(epochs: int, batch_size: int):
         train_dataset = tf.data.Dataset.from_tensor_slices((train_batch_idx, train_measurement_labels))
         train_dataset = train_dataset.shuffle(buffer_size=1024).batch(batch_size)
 
-        # Iterate over the minibatches
-        for step, (train_batch_data, train_batch_labels) in enumerate(train_dataset):
-            batch_indexes = train_batch_data.numpy()
+        # Iterate for the specified number of epochs
+        for epoch in range(epochs):
+            print(f'epoch: {epoch+1}/{epochs} - fold: {fold_step+1}/{folds}\n')
 
-            windows = train_windows[batch_indexes]
-            masks = train_masks[batch_indexes]
+            prog_bar = Progbar(target=len(train_batch_idx))
+
+            # Iterate over the minibatches
+            for step, (train_batch_data, train_batch_labels) in enumerate(train_dataset):
+                batch_indexes = train_batch_data.numpy()
+
+                windows = train_windows[batch_indexes]
+                masks = train_masks[batch_indexes]
+
+                # Update progress bar
+                prog_bar.add(batch_size)
 
 
 if __name__ == '__main__':
+    folds = 5
     epochs = 50
     batch_size = 128
-    train(epochs=epochs, batch_size=batch_size)
+    train(folds=folds, epochs=epochs, batch_size=batch_size)
