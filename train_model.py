@@ -10,6 +10,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.TrainingDataCreator import TrainingDataCreator
+from model.MatchNetConfig import MatchNetConfig
 from model.model_builder import build_model
 
 def train(folds, epochs: int, batch_size: int):
@@ -32,6 +33,17 @@ def train(folds, epochs: int, batch_size: int):
     patients, horizon_labels, measurement_labels, feature_windows, mask_windows = data_creator.create_training_data(study_df, missing_masks)
     kfold_split = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
+    # Create MatchnetConfiguration
+    model_config = MatchNetConfig(
+        cov_filters=32, 
+        mask_filters=8, 
+        cov_filter_size=3, 
+        mask_filter_size=3, 
+        cov_input_shape=(3, 20), 
+        mask_input_shape=(3, 20), 
+        dense_units=32, 
+        pred_horizon=3)
+
     print('Start training')
     for fold_step, (train_idx, test_idx) in enumerate(kfold_split.split(feature_windows, horizon_labels)):
         train_horizon_labels = horizon_labels[train_idx]
@@ -53,6 +65,9 @@ def train(folds, epochs: int, batch_size: int):
         train_dataset = tf.data.Dataset.from_tensor_slices((train_batch_idx, train_measurement_labels))
         train_dataset = train_dataset.shuffle(buffer_size=1024).batch(batch_size)
 
+        # Create the model
+        model = build_model(model_config)
+
         # Iterate for the specified number of epochs
         for epoch in range(epochs):
             print(f'epoch: {epoch+1}/{epochs} - fold: {fold_step+1}/{folds}\n')
@@ -65,6 +80,7 @@ def train(folds, epochs: int, batch_size: int):
 
                 windows = train_windows[batch_indexes]
                 masks = train_masks[batch_indexes]
+
 
                 # Update progress bar
                 prog_bar.add(batch_size)

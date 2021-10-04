@@ -1,5 +1,3 @@
-from tensorflow.keras.optimizers import Adam
-
 from typing import Tuple
 
 
@@ -12,9 +10,7 @@ class MatchNetConfig():
                  cov_input_shape: Tuple[int, int],
                  mask_input_shape: Tuple[int, int],
                  dense_units: int,
-                 pred_horizon: int,
-                 lr_rate: float,
-                 batch_size: int):
+                 pred_horizon: int):
 
         # Model configuration
         self.cov_filters: int = cov_filters
@@ -25,7 +21,3 @@ class MatchNetConfig():
         self.mask_input_shape: Tuple[int, int] = mask_input_shape
         self.dense_units: int = dense_units
         self.pred_horizon: int = pred_horizon
-
-        # Training configuration
-        self.optimizer = Adam(learning_rate=lr_rate)
-        self.batch_size = batch_size
