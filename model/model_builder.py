@@ -33,9 +33,13 @@ def build_model(config: MatchNetConfig) -> Model:
     dense = Dense(units=config.dense_units, activation='relu')(flatten)
     dense = Dense(units=config.dense_units, activation='relu')(dense)
 
-    # Define output layer and construct model
-    output = Dense(units=config.pred_horizon, activation='softmax')(dense)
+    # Define output layers based on specified prediction horizon
+    output_layers = []
+    for i in range(config.pred_horizon):
+        output = Dense(units=2, name=f'output_{i}', activation='softmax')(dense)
+        output_layers.append(output)
 
-    model = Model(inputs=[covariate_input, mask_input], outputs=output)
+    # Construct and return model
+    model = Model(inputs=[covariate_input, mask_input], outputs=output_layers)
 
     return model
