@@ -1,25 +1,25 @@
-import itertools
-from typing import Tuple
+from typing import List, Tuple
+
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 
-from tensorflow.keras import optimizers
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import CategoricalCrossentropy
 from tensorflow.keras.utils import Progbar
-from sklearn.model_selection import StratifiedKFold, train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, average_precision_score
 
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
-from eda_preprocessing.TrainingDataCreator import TrainingDataCreator
+from eda_preprocessing.DataCreator import DataCreator
 from model.MatchNetConfig import MatchNetConfig
 from model.model_builder import build_model
 
-def train(folds, epochs: int, batch_size: int):
+def train(epochs: int, batch_size: int):
 
     input_file = 'tadpole_challenge/TADPOLE_D1_D2.csv'
     data_preprocessor = DataPreprocessor(input_file, label_forwarding=False)
-    data_creator = TrainingDataCreator(window_length=4, prediction_horizon=3)
+    data_creator = DataCreator(window_length=4, prediction_horizon=3)
 
     study_df, missing_masks = data_preprocessor.preprocess_data()
 
@@ -27,13 +27,19 @@ def train(folds, epochs: int, batch_size: int):
     study_df['DX'] = study_df['DX'].replace('Dementia', 1)
     study_df['DX'] = study_df['DX'].replace(['MCI', 'NL', 'MCI to Dementia', 'NL to MCI', 'MCI to NL', 'Dementia to MCI', 'NL to Dementia'], 0)
     
-    # Impute missing labels and store index of imputed labels
-    # na_indexes = study_df.loc[study_df['DX'].isnull()].index
-    # study_df['DX'].fillna(0, inplace=True)
+    trajectory_labels, ptids = [], []
+    for ptid, trajectory in study_df.groupby("PTID"):
+        trajectory_labels.append(1) if 1 in trajectory['DX'].values else trajectory_labels.append(0)
+        ptids.append(ptid)
 
-    # Get data for training and testing and specify the KFold split
-    patients, horizon_labels, measurement_labels, imputed_labels, feature_windows, mask_windows = data_creator.create_training_data(study_df, missing_masks)
-    kfold_split = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    # Split data into train, val & test
+    train_trajectories, test_trajectories, train_labels, test_labels = train_test_split(ptids, trajectory_labels, test_size=0.2, random_state=42, stratify=trajectory_labels)
+    train_trajectories, val_trajectories = train_test_split(train_trajectories, test_size=0.25, random_state=42, stratify=train_labels)
+   
+    # Prepare training, validation & test data
+    train_measurement_labels, train_imputed_labels, train_windows, train_masks = prepare_data(data_creator, study_df, missing_masks, train_trajectories)
+    val_measurement_labels, val_imputed_labels, val_windows, val_masks = prepare_data(data_creator, study_df, missing_masks, val_trajectories)
+    test_measurement_labels, test_imputed_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories)
 
     # Create MatchnetConfiguration
     model_config = MatchNetConfig(
@@ -49,80 +55,68 @@ def train(folds, epochs: int, batch_size: int):
     optimizer = Adam()
     loss_fn = CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
 
-    print('Start training')
-    for fold_step, (train_idx, test_idx) in enumerate(kfold_split.split(feature_windows, horizon_labels)):
-        train_horizon_labels = horizon_labels[train_idx]
+    # Define array for retrieving feature windows and masks during training
+    train_batch_idx = np.arange(0, len(train_windows))
+    val_idx = np.arange(0, len(val_windows))
 
-        # Split train fold into train and validation data
-        train_idx, val_idx = train_test_split(train_idx, test_size=0.25, random_state=42, stratify=train_horizon_labels)
+    # Split training data into minibatches
+    train_dataset = tf.data.Dataset.from_tensor_slices((train_batch_idx, train_measurement_labels))
+    train_dataset = train_dataset.shuffle(buffer_size=1024).batch(batch_size)
 
-        # Unpack training data from nested list
-        train_measurement_labels = list(itertools.chain.from_iterable(measurement_labels[train_idx]))
-        train_windows = np.array(list(itertools.chain.from_iterable(feature_windows[train_idx])))
-        train_masks = np.array(list(itertools.chain.from_iterable(mask_windows[train_idx])))
+    # Create the model
+    model = build_model(model_config)
 
-        # Unpack validation data from nested list
-        val_measurement_labels = np.array(list(itertools.chain.from_iterable(measurement_labels[val_idx])))
-        val_windows = np.array(list(itertools.chain.from_iterable(feature_windows[val_idx])))
-        val_masks = np.array(list(itertools.chain.from_iterable(mask_windows[val_idx])))
+    # Training stats
+    best_val_loss = np.inf
+    best_model_weights = None
 
-        # Define array for retrieving feature windows and masks during training
-        train_batch_idx = np.arange(0, len(train_windows))
-        val_idx = np.arange(0, len(val_windows))
+    # Iterate for the specified number of epochs
+    for epoch in range(epochs):
+        print(f'epoch: {epoch+1}/{epochs}\n')
 
-        # Split training data into minibatches
-        train_dataset = tf.data.Dataset.from_tensor_slices((train_batch_idx, train_measurement_labels))
-        train_dataset = train_dataset.shuffle(buffer_size=1024).batch(batch_size)
+        prog_bar = Progbar(target=len(train_batch_idx), stateful_metrics=['train_loss', 'AUROC', 'AUPRC'])
 
-        # Create the model
-        model = build_model(model_config)
+        # Iterate over the minibatches
+        for step, (train_batch_data, train_batch_labels) in enumerate(train_dataset):
+            batch_indexes = train_batch_data.numpy()
 
-        # Training stats
-        best_val_loss = np.inf
-        best_model_weights = None
+            windows = train_windows[batch_indexes].astype('float32')
+            masks = train_masks[batch_indexes].astype('float32')
 
-        # Iterate for the specified number of epochs
-        for epoch in range(epochs):
-            print(f'epoch: {epoch+1}/{epochs} - fold: {fold_step+1}/{folds}\n')
+            with tf.GradientTape() as tape:
+                predictions = model([windows, masks], training=True)
+                loss = compute_loss(loss_fn, train_batch_labels, predictions)
 
-            prog_bar = Progbar(target=len(train_batch_idx), stateful_metrics=['train_loss', 'AUROC', 'AUPRC'])
+            gradients = tape.gradient(loss, model.trainable_weights)
+            optimizer.apply_gradients(zip(gradients, model.trainable_weights))
 
-            # Iterate over the minibatches
-            for step, (train_batch_data, train_batch_labels) in enumerate(train_dataset):
-                batch_indexes = train_batch_data.numpy()
+            # Compute metrics
+            au_roc, au_prc = compute_metrics(train_batch_labels, predictions)
+            if au_roc != None and au_prc != None:
+                prog_metrics = [('train_loss', loss), ('AUROC', au_roc), ('AUPRC', au_prc)]
+            else:
+                prog_metrics = [('train_loss', loss)]
 
-                windows = train_windows[batch_indexes].astype('float32')
-                masks = train_masks[batch_indexes].astype('float32')
+            # Update progress bar
+            prog_bar.add(batch_size, values=prog_metrics)
 
-                with tf.GradientTape() as tape:
-                    predictions = model([windows, masks], training=True)
-                    loss = compute_loss(loss_fn, train_batch_labels, predictions)
+        if epoch % 10 == 0:
+            # Compute validation performance
+            val_predictions = model([val_windows, val_masks], training=False)
 
-                gradients = tape.gradient(loss, model.trainable_weights)
-                optimizer.apply_gradients(zip(gradients, model.trainable_weights))
+            val_loss = compute_loss(loss_fn, val_measurement_labels, val_predictions)
+            val_au_roc, val_au_prc = compute_metrics(val_measurement_labels, val_predictions)
 
-                # Compute metrics
-                au_roc, au_prc = compute_metrics(train_batch_labels, predictions)
-                if au_roc != 0 and au_prc != 0:
-                    prog_metrics = [('train_loss', loss), ('AUROC', au_roc), ('AUPRC', au_prc)]
-                else:
-                    prog_metrics = [('train_loss', loss)]
+            print(f'Validation loss: {val_loss}, AUROC: {val_au_roc}, AUPRC: {val_au_prc}')
 
-                # Update progress bar
-                prog_bar.add(batch_size, values=prog_metrics)
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                best_model_weights = model.get_weights()
 
-            if epoch % 10 == 0:
-                # Compute validation performance
-                val_predictions = model([val_windows, val_masks], training=False)
-
-                val_loss = compute_loss(loss_fn, val_measurement_labels, val_predictions)
-                val_au_roc, val_au_prc = compute_metrics(val_measurement_labels, val_predictions)
-
-                print(f'Validation loss: {val_loss}, AUROC: {val_au_roc}, AUPRC: {val_au_prc}')
-
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    best_model_weights = model.get_weights()
+def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
+    windows = study_df.loc[study_df['PTID'].isin(trajectories)]
+    masks = missing_masks.loc[missing_masks['PTID'].isin(trajectories)]
+    return data_creator.create_data(windows, masks)
 
 def compute_loss(loss_fn, labels, predictions):
     loss = []
@@ -151,10 +145,9 @@ def compute_metrics(labels, predictions) -> Tuple[int, int]:
 
     if len(predictions) - decay != 0:
         return au_roc / (len(predictions) - decay), au_rpc / (len(predictions) - decay)
-    return 0, 0
+    return None, None
 
 if __name__ == '__main__':
-    folds = 5
     epochs = 50
     batch_size = 128
-    train(folds=folds, epochs=epochs, batch_size=batch_size)
+    train(epochs=epochs, batch_size=batch_size)

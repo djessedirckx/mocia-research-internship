@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 import pandas as pd
 
@@ -7,16 +8,14 @@ from typing import Tuple
 from sklearn.preprocessing import OneHotEncoder
 
 
-class TrainingDataCreator():
+class DataCreator():
 
     def __init__(self, window_length: int, prediction_horizon: int) -> None:
         self.window_length = window_length
         self.prediction_horizon = prediction_horizon
 
-    def create_training_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame) -> Tuple[np.array, np.array, np.array, np.array, np.array]:
-        patients, horizon_labels, measurement_labels, imputed_labels, feature_window_set, mask_window_set = [], [], [], [], [], []
-
-        print('Creating training data...')
+    def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame) -> Tuple[np.array, np.array, np.array, np.array]:
+        measurement_labels, imputed_labels, feature_window_set, mask_window_set = [], [], [], []
 
         # Apply one-hot encoding on measurement labels
         enc = OneHotEncoder()
@@ -24,7 +23,6 @@ class TrainingDataCreator():
 
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
-            patients.append(name)
 
             traj_labels = trajectory['DX'].values
             mod = traj_labels.shape[0] % self.prediction_horizon
@@ -58,8 +56,6 @@ class TrainingDataCreator():
                 traj_windows.append(traj_features[i:i+self.prediction_horizon+1, :])
                 mask_windows.append(masks_features[i:i+self.prediction_horizon+1, :])
 
-            horizon_labels.append(1) if 1 in pred_horizons else horizon_labels.append(0)
-
             # Apply one-hot encoding on the measurement labels (required for loss calculation)
             one_hot_labels = []
             for column in pred_horizons.transpose():
@@ -70,7 +66,12 @@ class TrainingDataCreator():
             feature_window_set.append(traj_windows)
             mask_window_set.append(mask_windows)
 
-        return np.array(patients), np.array(horizon_labels), np.array(measurement_labels, dtype='object'), np.array(imputed_labels, dtype='object'), np.array(feature_window_set, dtype='object'), np.array(mask_window_set, dtype='object')
+        measurement_labels = np.array(list(itertools.chain.from_iterable(measurement_labels)))
+        imputed_labels = np.array(list(itertools.chain.from_iterable(imputed_labels)))
+        feature_window_set = np.array(list(itertools.chain.from_iterable(feature_window_set)))
+        mask_window_set = np.array(list(itertools.chain.from_iterable(mask_window_set)))
+
+        return measurement_labels, imputed_labels, feature_window_set, mask_window_set
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
         traj_features = trajectory.iloc[:, 3:-1].values
