@@ -12,7 +12,8 @@ class MatchNetConfig():
                  dense_units: int,
                  pred_horizon: int,
                  dropout_rate: float,
-                 val_score_repeats: int):
+                 val_score_repeats: int,
+                 output_path: str):
 
         # Model configuration
         self.cov_filters: int = cov_filters
@@ -25,3 +26,4 @@ class MatchNetConfig():
         self.pred_horizon: int = pred_horizon
         self.dropout_rate: float = dropout_rate
         self.val_score_repeats: int = val_score_repeats
+        self.output_path: str = output_path

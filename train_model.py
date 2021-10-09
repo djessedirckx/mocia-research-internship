@@ -1,9 +1,11 @@
+from datetime import datetime
 from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 
+from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import CategoricalCrossentropy
 from tensorflow.keras.utils import Progbar
@@ -14,6 +16,7 @@ from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
 from model.MatchNetConfig import MatchNetConfig
 from model.model_builder import build_model
+
 
 def train(epochs: int, batch_size: int):
 
@@ -52,7 +55,8 @@ def train(epochs: int, batch_size: int):
         dense_units=32, 
         pred_horizon=3,
         dropout_rate=0.2,
-        val_score_repeats=10)
+        val_score_repeats=10,
+        output_path='output')
 
     optimizer = Adam()
     loss_fn = CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
@@ -68,9 +72,9 @@ def train(epochs: int, batch_size: int):
     # Create the model
     model = build_model(model_config)
 
-    # Training stats
-    best_val_loss = np.inf
-    best_model_weights = None
+    # Define arrays for storing statistics
+    train_losses, val_losses = [], []
+    train_aurocs, val_aurocs, train_auprcs, val_auprcs = [], [], [], []
 
     # Iterate for the specified number of epochs
     for epoch in range(epochs):
@@ -94,6 +98,7 @@ def train(epochs: int, batch_size: int):
 
             gradients = tape.gradient(loss, model.trainable_weights)
             optimizer.apply_gradients(zip(gradients, model.trainable_weights))
+            train_losses.append(loss)
 
             # Compute metrics
             au_roc, au_prc = compute_metrics(train_batch_labels, predictions)
@@ -101,6 +106,8 @@ def train(epochs: int, batch_size: int):
                 prog_metrics = [('train_loss', loss), ('AUROC', au_roc), ('AUPRC', au_prc)]
             else:
                 prog_metrics = [('train_loss', loss)]
+            train_aurocs.append(au_roc)
+            train_auprcs.append(au_prc)
 
             # Update progress bar
             prog_bar.add(batch_size, values=prog_metrics)
@@ -121,11 +128,16 @@ def train(epochs: int, batch_size: int):
             val_au_roc /= model_config.val_score_repeats
             val_au_prc /= model_config.val_score_repeats
 
+            # Store validation statistics
+            val_losses.append(val_loss)
+            val_aurocs.append(val_au_roc)
+            val_auprcs.append(val_au_prc)
+
             print(f'Validation loss: {val_loss}, AUROC: {val_au_roc}, AUPRC: {val_au_prc}')
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_model_weights = model.get_weights()
+    # Store training/validation statistics and the model
+    save_statistics(model_config, model, train_losses, val_losses, train_aurocs, train_auprcs, val_aurocs, val_auprcs)
+
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
     windows = study_df.loc[study_df['PTID'].isin(trajectories)]
@@ -165,6 +177,23 @@ def compute_metrics(labels, predictions) -> Tuple[int, int]:
     if len(predictions) - decay != 0:
         return au_roc / (len(predictions) - decay), au_rpc / (len(predictions) - decay)
     return None, None
+
+def save_statistics(config: MatchNetConfig, model: Model, train_loss: List, val_loss: List, train_auroc: List, train_aurpc: List, val_auroc: List, val_aurpc: List):
+
+    now = datetime.now().isoformat()
+
+    # Save all statistics as binary numpy files
+    np.save(f'{config.output_path}/train_loss-{now}', train_loss)
+    np.save(f'{config.output_path}/val_loss-{now}', val_loss)
+    np.save(f'{config.output_path}/train_auroc-{now}', train_auroc)
+    np.save(f'{config.output_path}/train_aurpc-{now}', train_aurpc)
+    np.save(f'{config.output_path}/val_auroc-{now}', val_auroc)
+    np.save(f'{config.output_path}/val_aurpc-{now}', val_aurpc)
+
+    # Store model
+    model.save(f'{config.output_path}/model-{now}.hdf5')
+
+    print(f'Stored output in {config.output_path}/, training finished')
 
 if __name__ == '__main__':
     epochs = 50
