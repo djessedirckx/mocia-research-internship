@@ -50,7 +50,9 @@ def train(epochs: int, batch_size: int):
         cov_input_shape=(4, 35), 
         mask_input_shape=(4, 35), 
         dense_units=32, 
-        pred_horizon=3)
+        pred_horizon=3,
+        dropout_rate=0.2,
+        val_score_repeats=10)
 
     optimizer = Adam()
     loss_fn = CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
@@ -105,10 +107,19 @@ def train(epochs: int, batch_size: int):
 
         if epoch % 10 == 0:
             # Compute validation performance
-            val_predictions = model([val_windows, val_masks], training=False)
 
-            val_loss = compute_loss(loss_fn, val_measurement_labels, val_predictions, val_imputed_labels)
-            val_au_roc, val_au_prc = compute_metrics(val_measurement_labels, val_predictions)
+            val_loss, val_au_roc, val_au_prc = 0, 0, 0
+            for i in range(model_config.val_score_repeats):
+                val_predictions = model([val_windows, val_masks])
+
+                val_loss += compute_loss(loss_fn, val_measurement_labels, val_predictions, val_imputed_labels)
+                val_au_roc_sample, val_au_prc_sample = compute_metrics(val_measurement_labels, val_predictions)
+                val_au_roc += val_au_roc_sample
+                val_au_prc += val_au_prc_sample
+
+            val_loss /= model_config.val_score_repeats
+            val_au_roc /= model_config.val_score_repeats
+            val_au_prc /= model_config.val_score_repeats
 
             print(f'Validation loss: {val_loss}, AUROC: {val_au_roc}, AUPRC: {val_au_prc}')
 

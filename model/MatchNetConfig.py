@@ -10,7 +10,9 @@ class MatchNetConfig():
                  cov_input_shape: Tuple[int, int],
                  mask_input_shape: Tuple[int, int],
                  dense_units: int,
-                 pred_horizon: int):
+                 pred_horizon: int,
+                 dropout_rate: float,
+                 val_score_repeats: int):
 
         # Model configuration
         self.cov_filters: int = cov_filters
@@ -21,3 +23,5 @@ class MatchNetConfig():
         self.mask_input_shape: Tuple[int, int] = mask_input_shape
         self.dense_units: int = dense_units
         self.pred_horizon: int = pred_horizon
+        self.dropout_rate: float = dropout_rate
+        self.val_score_repeats: int = val_score_repeats
