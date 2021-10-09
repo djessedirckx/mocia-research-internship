@@ -80,12 +80,15 @@ def train(epochs: int, batch_size: int):
         for step, (train_batch_data, train_batch_labels) in enumerate(train_dataset):
             batch_indexes = train_batch_data.numpy()
 
+            # Get boolean array that represents which labels are imputed
+            batch_imputed_labels = train_imputed_labels[batch_indexes]
+
             windows = train_windows[batch_indexes].astype('float32')
             masks = train_masks[batch_indexes].astype('float32')
 
             with tf.GradientTape() as tape:
                 predictions = model([windows, masks], training=True)
-                loss = compute_loss(loss_fn, train_batch_labels, predictions)
+                loss = compute_loss(loss_fn, train_batch_labels, predictions, batch_imputed_labels)
 
             gradients = tape.gradient(loss, model.trainable_weights)
             optimizer.apply_gradients(zip(gradients, model.trainable_weights))
@@ -104,7 +107,7 @@ def train(epochs: int, batch_size: int):
             # Compute validation performance
             val_predictions = model([val_windows, val_masks], training=False)
 
-            val_loss = compute_loss(loss_fn, val_measurement_labels, val_predictions)
+            val_loss = compute_loss(loss_fn, val_measurement_labels, val_predictions, val_imputed_labels)
             val_au_roc, val_au_prc = compute_metrics(val_measurement_labels, val_predictions)
 
             print(f'Validation loss: {val_loss}, AUROC: {val_au_roc}, AUPRC: {val_au_prc}')
@@ -118,12 +121,17 @@ def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_mask
     masks = missing_masks.loc[missing_masks['PTID'].isin(trajectories)]
     return data_creator.create_data(windows, masks)
 
-def compute_loss(loss_fn, labels, predictions):
+def compute_loss(loss_fn, labels, predictions, imputed_labels):
     loss = []
     
     for i in range(len(predictions)):
         prediction = predictions[i]
         label = labels[:, i]
+        imputed = imputed_labels[:, i]
+
+        # Compute loss, ignore imputed (or forwarded) labels
+        prediction = prediction[imputed == False]
+        label = label[imputed == False]
         loss.append(loss_fn(label, prediction))
 
     loss = tf.concat(loss, 0)
