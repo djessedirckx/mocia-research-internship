@@ -160,7 +160,7 @@ def compute_loss(loss_fn, labels, predictions, imputed_labels):
     loss = tf.concat(loss, 0)
     return tf.reduce_mean(loss)
 
-def compute_metrics(labels, predictions) -> Tuple[int, int]:
+def compute_metrics(labels, predictions) -> Tuple[float, float]:
     au_roc, au_rpc, decay = 0, 0, 0
     for i in range(len(predictions)):
         prediction = predictions[i]

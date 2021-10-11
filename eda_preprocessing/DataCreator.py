@@ -15,7 +15,7 @@ class DataCreator():
         self.prediction_horizon = prediction_horizon
 
     def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame) -> Tuple[np.array, np.array, np.array, np.array]:
-        measurement_labels, imputed_labels, feature_window_set, mask_window_set = [], [], [], []
+        measurement_labels, true_labels, feature_window_set, mask_window_set = [], [], [], []
 
         # Apply one-hot encoding on measurement labels
         enc = OneHotEncoder()
@@ -39,7 +39,7 @@ class DataCreator():
                 pred_horizons = np.concatenate((pred_horizons, remainder))
 
             # One-hot encode event labels. Store index of imputed labels for later loss calculation
-            imputed_labels.append(np.isnan(pred_horizons))
+            true_labels.append(~np.isnan(pred_horizons))
             pred_horizons = np.nan_to_num(pred_horizons)
 
             # Extrapolate left-truncated values
@@ -67,11 +67,11 @@ class DataCreator():
             mask_window_set.append(mask_windows)
 
         measurement_labels = np.array(list(itertools.chain.from_iterable(measurement_labels)))
-        imputed_labels = np.array(list(itertools.chain.from_iterable(imputed_labels)))
+        true_labels = np.array(list(itertools.chain.from_iterable(true_labels)))
         feature_window_set = np.array(list(itertools.chain.from_iterable(feature_window_set)))
         mask_window_set = np.array(list(itertools.chain.from_iterable(mask_window_set)))
 
-        return measurement_labels, imputed_labels, feature_window_set, mask_window_set
+        return measurement_labels, true_labels, feature_window_set, mask_window_set
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
         traj_features = trajectory.iloc[:, 3:-1].values
