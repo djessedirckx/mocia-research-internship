@@ -5,3 +5,4 @@ output
 # Python stuff
 .ipynb_checkpoints
 *.pyc
+experiments
