@@ -59,7 +59,7 @@ class MatchNet(Model):
 
         # Compute test loss, auroc & auprc for a specified number of steps and
         # return average scores (mc dropout is applied)
-        for i in range(self.config.val_score_repeats):
+        for i in range(self.config.mc_repeats):
             predictions = self(measurements, training=True)
 
             # Compute loss and metrics
@@ -71,10 +71,10 @@ class MatchNet(Model):
             convergence_total += convergence
 
         # Update metrics
-        self.val_loss_tracker.update_state(loss_total / self.config.val_score_repeats)
-        self.val_auroc_tracker.update_state(au_roc_total / self.config.val_score_repeats)
-        self.val_auprc_tracker.update_state(au_prc_total / self.config.val_score_repeats)
-        self.convergence_tracker.update_state(convergence_total / self.config.val_score_repeats)
+        self.val_loss_tracker.update_state(loss_total / self.config.mc_repeats)
+        self.val_auroc_tracker.update_state(au_roc_total / self.config.mc_repeats)
+        self.val_auprc_tracker.update_state(au_prc_total / self.config.mc_repeats)
+        self.convergence_tracker.update_state(convergence_total / self.config.mc_repeats)
 
         return {
             "loss": self.val_loss_tracker.result(),

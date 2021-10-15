@@ -16,7 +16,7 @@ class MatchNetConfig():
                  l2: float,
                  convergence_weights: List[Tuple[float, float]],
                  val_frequency: int,
-                 val_score_repeats: int,
+                 mc_repeats: int,
                  output_path: str):
 
         # Model configuration
@@ -33,5 +33,5 @@ class MatchNetConfig():
         self.l2: float = l2
         self.convergence_weights: List[Tuple[float, float]] = convergence_weights
         self.val_frequency = val_frequency
-        self.val_score_repeats: int = val_score_repeats
+        self.mc_repeats: int = mc_repeats
         self.output_path: str = output_path

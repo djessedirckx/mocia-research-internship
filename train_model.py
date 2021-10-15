@@ -1,16 +1,15 @@
+import os
+
 from datetime import datetime
-from typing import List, Tuple
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 
+from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.losses import CategoricalCrossentropy
-from tensorflow.keras.utils import Progbar
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score, average_precision_score
 
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
@@ -28,115 +27,77 @@ def train(epochs: int, batch_size: int):
 
     # Make label binary, mark all Dementia instances as positive
     study_df['DX'] = study_df['DX'].replace('Dementia', 1)
-    study_df['DX'] = study_df['DX'].replace(['MCI', 'NL', 'MCI to Dementia', 'NL to MCI', 'MCI to NL', 'Dementia to MCI', 'NL to Dementia'], 0)
-    
+    study_df['DX'] = study_df['DX'].replace(
+        ['MCI', 'NL', 'MCI to Dementia', 'NL to MCI', 'MCI to NL', 'Dementia to MCI', 'NL to Dementia'], 0)
+
     trajectory_labels, ptids = [], []
     for ptid, trajectory in study_df.groupby("PTID"):
-        trajectory_labels.append(1) if 1 in trajectory['DX'].values else trajectory_labels.append(0)
+        trajectory_labels.append(
+            1) if 1 in trajectory['DX'].values else trajectory_labels.append(0)
         ptids.append(ptid)
 
     # Split data into train, val & test
-    train_trajectories, test_trajectories, train_labels, test_labels = train_test_split(ptids, trajectory_labels, test_size=0.2, random_state=42, stratify=trajectory_labels)
-    train_trajectories, val_trajectories = train_test_split(train_trajectories, test_size=0.25, random_state=42, stratify=train_labels)
-   
+    train_trajectories, test_trajectories, train_labels, test_labels = train_test_split(
+        ptids, trajectory_labels, test_size=0.2, random_state=42, stratify=trajectory_labels)
+    train_trajectories, val_trajectories = train_test_split(
+        train_trajectories, test_size=0.25, random_state=42, stratify=train_labels)
+
     # Prepare training, validation & test data
-    train_measurement_labels, train_imputed_labels, train_windows, train_masks = prepare_data(data_creator, study_df, missing_masks, train_trajectories)
-    val_measurement_labels, val_imputed_labels, val_windows, val_masks = prepare_data(data_creator, study_df, missing_masks, val_trajectories)
-    test_measurement_labels, test_imputed_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories)
+    train_measurement_labels, train_true_labels, train_windows, train_masks = prepare_data(
+        data_creator, study_df, missing_masks, train_trajectories)
+    val_measurement_labels, val_true_labels, val_windows, val_masks = prepare_data(
+        data_creator, study_df, missing_masks, val_trajectories)
+    test_measurement_labels, test_true_labels, test_windows, test_masks = prepare_data(
+        data_creator, study_df, missing_masks, test_trajectories)
 
     # Create MatchnetConfiguration
+    convergence_weights = [
+        (1, 1),
+        (1, 1),
+        (1, 1),
+    ]
+
     model_config = MatchNetConfig(
-        cov_filters=32, 
-        mask_filters=8, 
-        cov_filter_size=3, 
-        mask_filter_size=3, 
-        cov_input_shape=(4, 35), 
-        mask_input_shape=(4, 35), 
-        dense_units=32, 
+        cov_filters=32,
+        mask_filters=8,
+        cov_filter_size=3,
+        mask_filter_size=3,
+        cov_input_shape=(4, 35),
+        mask_input_shape=(4, 35),
+        dense_units=32,
         pred_horizon=3,
         dropout_rate=0.2,
-        val_score_repeats=10,
+        l1=0.01,
+        l2=0.01,
+        convergence_weights=convergence_weights,
+        val_frequency=5,
+        mc_repeats=10,
         output_path='output')
 
     optimizer = Adam()
-    loss_fn = CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
-
-    # Define array for retrieving feature windows and masks during training
-    train_batch_idx = np.arange(0, len(train_windows))
-    val_idx = np.arange(0, len(val_windows))
-
-    # Split training data into minibatches
-    train_dataset = tf.data.Dataset.from_tensor_slices((train_batch_idx, train_measurement_labels))
-    train_dataset = train_dataset.shuffle(buffer_size=1024).batch(batch_size)
 
     # Create the model
     model = build_model(model_config)
+    model.compile(optimizer=optimizer)
 
-    # Define arrays for storing statistics
-    train_losses, val_losses = [], []
-    train_aurocs, val_aurocs, train_auprcs, val_auprcs = [], [], [], []
+    train_data = [train_windows, train_masks]
+    train_labels = train_measurement_labels
+    validation_data = [val_windows, val_masks]
+    validation_labels = val_measurement_labels
 
-    # Iterate for the specified number of epochs
-    for epoch in range(epochs):
-        print(f'epoch: {epoch+1}/{epochs}\n')
+    # Define early stopping callback
+    early_stopping = EarlyStopping(monitor='val_convergence_metric', patience=model_config.val_frequency, verbose=1, mode='max')
 
-        prog_bar = Progbar(target=len(train_batch_idx), stateful_metrics=['train_loss', 'AUROC', 'AUPRC'])
+    history = model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=epochs, sample_weight=train_true_labels, validation_data=(
+        validation_data, validation_labels, val_true_labels), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
 
-        # Iterate over the minibatches
-        for step, (train_batch_data, train_batch_labels) in enumerate(train_dataset):
-            batch_indexes = train_batch_data.numpy()
+    # Evaluate on test data
+    print('Evaluating on test data...')
+    model.evaluate([test_windows, test_masks], test_measurement_labels,
+          sample_weight=test_true_labels, batch_size=len(test_true_labels))
 
-            # Get boolean array that represents which labels are imputed
-            batch_imputed_labels = train_imputed_labels[batch_indexes]
-
-            windows = train_windows[batch_indexes].astype('float32')
-            masks = train_masks[batch_indexes].astype('float32')
-
-            with tf.GradientTape() as tape:
-                predictions = model([windows, masks], training=True)
-                loss = compute_loss(loss_fn, train_batch_labels, predictions, batch_imputed_labels)
-
-            gradients = tape.gradient(loss, model.trainable_weights)
-            optimizer.apply_gradients(zip(gradients, model.trainable_weights))
-            train_losses.append(loss)
-
-            # Compute metrics
-            au_roc, au_prc = compute_metrics(train_batch_labels, predictions)
-            if au_roc != None and au_prc != None:
-                prog_metrics = [('train_loss', loss), ('AUROC', au_roc), ('AUPRC', au_prc)]
-            else:
-                prog_metrics = [('train_loss', loss)]
-            train_aurocs.append(au_roc)
-            train_auprcs.append(au_prc)
-
-            # Update progress bar
-            prog_bar.add(batch_size, values=prog_metrics)
-
-        if epoch % 10 == 0:
-            # Compute validation performance
-
-            val_loss, val_au_roc, val_au_prc = 0, 0, 0
-            for i in range(model_config.val_score_repeats):
-                val_predictions = model([val_windows, val_masks])
-
-                val_loss += compute_loss(loss_fn, val_measurement_labels, val_predictions, val_imputed_labels)
-                val_au_roc_sample, val_au_prc_sample = compute_metrics(val_measurement_labels, val_predictions)
-                val_au_roc += val_au_roc_sample
-                val_au_prc += val_au_prc_sample
-
-            val_loss /= model_config.val_score_repeats
-            val_au_roc /= model_config.val_score_repeats
-            val_au_prc /= model_config.val_score_repeats
-
-            # Store validation statistics
-            val_losses.append(val_loss)
-            val_aurocs.append(val_au_roc)
-            val_auprcs.append(val_au_prc)
-
-            print(f'Validation loss: {val_loss}, AUROC: {val_au_roc}, AUPRC: {val_au_prc}')
-
-    # Store training/validation statistics and the model
-    save_statistics(model_config, model, train_losses, val_losses, train_aurocs, train_auprcs, val_aurocs, val_auprcs)
+    # Store output and model
+    save_statistics(model_config, model, history)
 
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
@@ -144,56 +105,26 @@ def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_mask
     masks = missing_masks.loc[missing_masks['PTID'].isin(trajectories)]
     return data_creator.create_data(windows, masks)
 
-def compute_loss(loss_fn, labels, predictions, imputed_labels):
-    loss = []
-    
-    for i in range(len(predictions)):
-        prediction = predictions[i]
-        label = labels[:, i]
-        imputed = imputed_labels[:, i]
 
-        # Compute loss, ignore imputed (or forwarded) labels
-        prediction = prediction[imputed == False]
-        label = label[imputed == False]
-        loss.append(loss_fn(label, prediction))
-
-    loss = tf.concat(loss, 0)
-    return tf.reduce_mean(loss)
-
-def compute_metrics(labels, predictions) -> Tuple[float, float]:
-    au_roc, au_rpc, decay = 0, 0, 0
-    for i in range(len(predictions)):
-        prediction = predictions[i]
-        label = labels[:, i]
-
-        # Compute AUROC and AURPC score. Try except is added in case only one class is present
-        # for the respective timepoint in the minibatch
-        try:
-            au_roc += roc_auc_score(label, prediction)
-            au_rpc += average_precision_score(label, prediction)
-        except:
-            decay += 1
-
-    if len(predictions) - decay != 0:
-        return au_roc / (len(predictions) - decay), au_rpc / (len(predictions) - decay)
-    return None, None
-
-def save_statistics(config: MatchNetConfig, model: Model, train_loss: List, val_loss: List, train_auroc: List, train_aurpc: List, val_auroc: List, val_aurpc: List):
+def save_statistics(config: MatchNetConfig, model: Model, history: Dict):
 
     now = datetime.now().isoformat()
 
+    # Create output directory based on current date and time
+    path = os.path.join(config.output_path, now)
+    os.makedirs(path)
+
     # Save all statistics as binary numpy files
-    np.save(f'{config.output_path}/train_loss-{now}', train_loss)
-    np.save(f'{config.output_path}/val_loss-{now}', val_loss)
-    np.save(f'{config.output_path}/train_auroc-{now}', train_auroc)
-    np.save(f'{config.output_path}/train_aurpc-{now}', train_aurpc)
-    np.save(f'{config.output_path}/val_auroc-{now}', val_auroc)
-    np.save(f'{config.output_path}/val_aurpc-{now}', val_aurpc)
+    np.save(f'{path}/train_loss', history.history['loss'])
+    np.save(f'{path}/val_loss', history.history['val_loss'])
+    np.save(f'{path}/val_auroc', history.history['val_au_roc'])
+    np.save(f'{path}/val_aurpc', history.history['val_au_prc'])
 
     # Store model
-    model.save(f'{config.output_path}/model-{now}.hdf5')
+    model.save(f'{path}/model.hdf5')
 
-    print(f'Stored output in {config.output_path}/, training finished')
+    print(f'Stored output in {path}, training finished')
+
 
 if __name__ == '__main__':
     epochs = 50
