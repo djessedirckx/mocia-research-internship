@@ -79,7 +79,7 @@ class MatchNet(Model):
         return {
             "loss": self.val_loss_tracker.result(),
             "au_roc": self.val_auroc_tracker.result(),
-            "au_rpc": self.val_auprc_tracker.result(),
+            "au_prc": self.val_auprc_tracker.result(),
             "convergence_metric": self.convergence_tracker.result()
         }
 

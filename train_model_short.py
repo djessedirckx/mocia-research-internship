@@ -1,5 +1,7 @@
+import os
+
 from datetime import datetime
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -94,8 +96,8 @@ def train(epochs: int, batch_size: int):
     model.evaluate([test_windows, test_masks], test_measurement_labels,
           sample_weight=test_true_labels, batch_size=len(test_true_labels))
 
-    np.save('train_loss', history.history['loss'])
-    np.save('val_loss', history.history['val_loss'])
+    # Store output and model
+    save_statistics(model_config, model, history)
 
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
@@ -104,22 +106,24 @@ def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_mask
     return data_creator.create_data(windows, masks)
 
 
-def save_statistics(config: MatchNetConfig, model: Model, train_loss: List, val_loss: List, train_auroc: List, train_aurpc: List, val_auroc: List, val_aurpc: List):
+def save_statistics(config: MatchNetConfig, model: Model, history: Dict):
 
     now = datetime.now().isoformat()
 
+    # Create output directory based on current date and time
+    path = os.path.join(config.output_path, now)
+    os.makedirs(path)
+
     # Save all statistics as binary numpy files
-    np.save(f'{config.output_path}/train_loss-{now}', train_loss)
-    np.save(f'{config.output_path}/val_loss-{now}', val_loss)
-    np.save(f'{config.output_path}/train_auroc-{now}', train_auroc)
-    np.save(f'{config.output_path}/train_aurpc-{now}', train_aurpc)
-    np.save(f'{config.output_path}/val_auroc-{now}', val_auroc)
-    np.save(f'{config.output_path}/val_aurpc-{now}', val_aurpc)
+    np.save(f'{path}/train_loss', history.history['loss'])
+    np.save(f'{path}/val_loss', history.history['val_loss'])
+    np.save(f'{path}/val_auroc', history.history['val_au_roc'])
+    np.save(f'{path}/val_aurpc', history.history['val_au_prc'])
 
     # Store model
-    model.save(f'{config.output_path}/model-{now}.hdf5')
+    model.save(f'{path}/model.hdf5')
 
-    print(f'Stored output in {config.output_path}/, training finished')
+    print(f'Stored output in {path}, training finished')
 
 
 if __name__ == '__main__':
