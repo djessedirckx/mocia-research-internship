@@ -65,6 +65,8 @@ def train(epochs: int, batch_size: int):
         dense_units=32,
         pred_horizon=3,
         dropout_rate=0.2,
+        l1=0.01,
+        l2=0.01,
         convergence_weights=convergence_weights,
         val_frequency=5,
         val_score_repeats=10,

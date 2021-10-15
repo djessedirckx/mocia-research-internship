@@ -12,6 +12,8 @@ class MatchNetConfig():
                  dense_units: int,
                  pred_horizon: int,
                  dropout_rate: float,
+                 l1: float,
+                 l2: float,
                  convergence_weights: List[Tuple[float, float]],
                  val_frequency: int,
                  val_score_repeats: int,
@@ -27,6 +29,8 @@ class MatchNetConfig():
         self.dense_units: int = dense_units
         self.pred_horizon: int = pred_horizon
         self.dropout_rate: float = dropout_rate
+        self.l1: float = l1
+        self.l2: float = l2
         self.convergence_weights: List[Tuple[float, float]] = convergence_weights
         self.val_frequency = val_frequency
         self.val_score_repeats: int = val_score_repeats

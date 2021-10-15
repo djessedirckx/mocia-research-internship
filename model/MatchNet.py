@@ -63,8 +63,7 @@ class MatchNet(Model):
             predictions = self(measurements, training=True)
 
             # Compute loss and metrics
-            loss_total += self.compute_loss(labels,
-                                            predictions, sample_weights)
+            loss_total += self.compute_loss(labels,predictions, sample_weights)
             au_roc, au_prc, convergence = self.compute_metrics(
                 labels, predictions, sample_weights, self.config.convergence_weights)
             au_roc_total += au_roc
@@ -72,14 +71,10 @@ class MatchNet(Model):
             convergence_total += convergence
 
         # Update metrics
-        self.val_loss_tracker.update_state(
-            loss_total / self.config.val_score_repeats)
-        self.val_auroc_tracker.update_state(
-            au_roc_total / self.config.val_score_repeats)
-        self.val_auprc_tracker.update_state(
-            au_prc_total / self.config.val_score_repeats)
-        self.convergence_tracker.update_state(
-            convergence_total / self.config.val_score_repeats)
+        self.val_loss_tracker.update_state(loss_total / self.config.val_score_repeats)
+        self.val_auroc_tracker.update_state(au_roc_total / self.config.val_score_repeats)
+        self.val_auprc_tracker.update_state(au_prc_total / self.config.val_score_repeats)
+        self.convergence_tracker.update_state(convergence_total / self.config.val_score_repeats)
 
         return {
             "loss": self.val_loss_tracker.result(),
@@ -136,12 +131,10 @@ class MatchNet(Model):
 
     @tf.function
     def compute_au_roc(self, labels, predictions):
-        score = tf.numpy_function(
-            roc_auc_score, [labels, predictions], tf.double)
+        score = tf.numpy_function(roc_auc_score, [labels, predictions], tf.double)
         return score
 
     @tf.function
     def compute_au_prc(self, labels, predictions):
-        score = tf.numpy_function(average_precision_score, [
-                                  labels, predictions], tf.double)
+        score = tf.numpy_function(average_precision_score, [labels, predictions], tf.double)
         return score
