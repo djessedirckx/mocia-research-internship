@@ -3,8 +3,8 @@ from typing import List
 
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 
+from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
@@ -49,6 +49,12 @@ def train(epochs: int, batch_size: int):
         data_creator, study_df, missing_masks, test_trajectories)
 
     # Create MatchnetConfiguration
+    convergence_weights = [
+        (1, 1),
+        (1, 1),
+        (1, 1),
+    ]
+
     model_config = MatchNetConfig(
         cov_filters=32,
         mask_filters=8,
@@ -59,6 +65,8 @@ def train(epochs: int, batch_size: int):
         dense_units=32,
         pred_horizon=3,
         dropout_rate=0.2,
+        convergence_weights=convergence_weights,
+        val_frequency=5,
         val_score_repeats=10,
         output_path='output')
 
@@ -73,7 +81,19 @@ def train(epochs: int, batch_size: int):
     validation_data = [val_windows, val_masks]
     validation_labels = val_measurement_labels
 
-    model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=epochs, sample_weight=train_true_labels, validation_data=(validation_data, validation_labels, val_true_labels))
+    # Define early stopping callback
+    early_stopping = EarlyStopping(monitor='val_convergence_metric', patience=model_config.val_frequency, verbose=1, mode='max')
+
+    history = model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=epochs, sample_weight=train_true_labels, validation_data=(
+        validation_data, validation_labels, val_true_labels), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
+
+    # Evaluate on test data
+    print('Evaluating on test data...')
+    model.evaluate([test_windows, test_masks], test_measurement_labels,
+          sample_weight=test_true_labels, batch_size=len(test_true_labels))
+
+    np.save('train_loss', history.history['loss'])
+    np.save('val_loss', history.history['val_loss'])
 
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
