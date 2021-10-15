@@ -47,6 +47,6 @@ def build_model(config: MatchNetConfig) -> MatchNet:
         output_layers.append(output)
 
     # Construct and return model
-    model = MatchNet(inputs=[covariate_input, mask_input], outputs=output_layers)
+    model = MatchNet(inputs=[covariate_input, mask_input], outputs=output_layers, config=config)
 
     return model

@@ -2,27 +2,30 @@ import tensorflow as tf
 
 from typing import Tuple
 
+from sklearn.metrics import roc_auc_score, average_precision_score
 from tensorflow.keras.losses import CategoricalCrossentropy
+from tensorflow.keras.metrics import Mean
 from tensorflow.keras.models import Model
+
+from model.MatchNetConfig import MatchNetConfig
 
 class MatchNet(Model):
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, config: MatchNetConfig, *args, **kwargs):
         super(MatchNet, self).__init__(*args, **kwargs)
         
         # Define loss and metric functions
         self.loss_fn = CategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
-        self.au_roc = AUC()
-        self.au_prc = AUC(curve='PR')
 
         # Initialise trackers for metrics
         self.loss_tracker = Mean(name="loss")
         self.val_loss_tracker = Mean(name="val_loss")
 
-        self.auroc_tracker = Mean(name="au_roc")
         self.val_auroc_tracker = Mean(name="val_au_roc")
-        self.auprc_tracker = Mean(name="au_prc")
         self.val_auprc_tracker = Mean(name="val_auprc")
+
+        # Store config
+        self.config = config
     
     def train_step(self, data):
         # Unpack the data
@@ -42,47 +45,47 @@ class MatchNet(Model):
         
         # Compute metrics
         self.loss_tracker.update_state(loss)
-        au_roc, au_prc = self.compute_metrics(labels, predictions, sample_weights)
-
-        if au_roc != None:
-            self.auroc_tracker.update_state(au_roc)
-            self.auprc_tracker.update_state(au_prc)
 
         return {
-            "loss": self.loss_tracker.result(),
-            "au_roc": self.auroc_tracker.result(),
-            "au_prc": self.auprc_tracker.result()
+            "loss": self.loss_tracker.result()
         } 
 
     def test_step(self, data):
         measurements, labels, sample_weights = data
-        predictions = self(measurements, training=True)
-        loss = self.compute_loss(labels, predictions, sample_weights)
+        loss_total, au_roc_total, au_prc_total = 0, 0, 0
 
-        # Compute metrics
-        self.val_loss_tracker.update_state(loss)
-        au_roc, au_prc = self.compute_metrics(labels, predictions, sample_weights)
+        # Compute test loss, auroc & auprc for a specified number of steps and 
+        # return average scores (mc dropout is applied)
+        for i in range(self.config.val_score_repeats):
+            predictions = self(measurements, training=True)
 
-        if au_roc != None:
-            self.val_auroc_tracker.update_state(au_roc)
-            self.val_auprc_tracker.update_state(au_prc)
+            # Compute loss and metrics
+            loss_total += self.compute_loss(labels, predictions, sample_weights)
+            au_roc, au_prc = self.compute_metrics(labels, predictions, sample_weights)
+            au_roc_total += au_roc
+            au_prc_total += au_prc
+
+        # Update metrics
+        self.val_loss_tracker.update_state(loss_total / self.config.val_score_repeats)
+        self.val_auroc_tracker.update_state(au_roc_total / self.config.val_score_repeats)
+        self.val_auprc_tracker.update_state(au_prc_total / self.config.val_score_repeats)
 
         return {
-            "val_loss": self.val_loss_tracker.result(),
+            "loss": self.val_loss_tracker.result(),
             "au_roc": self.val_auroc_tracker.result(),
-            "au_prc": self.val_auprc_tracker.result()
+            "au_rpc": self.val_auprc_tracker.result()
         }    
 
     def compute_loss(self, labels, predictions, sample_weights):
         loss = []
         
+        # Iterate over each timepoint in the prediction horizon
         for i in range(len(predictions)):
             prediction = predictions[i]
             label = labels[:, i]
             weights = sample_weights[:, i]
-            # imputed = imputed_labels[:, i]
 
-            # Compute loss, ignore imputed (or forwarded) labels
+            # Compute loss, ignore imputed (or forwarded-filled) labels
             prediction = prediction[weights]
             label = label[weights]
             loss.append(self.loss_fn(label, prediction))
@@ -92,25 +95,34 @@ class MatchNet(Model):
 
     def compute_metrics(self, labels, predictions, sample_weights) -> Tuple[float, float]:
         au_roc, au_prc = 0, 0
+
+        # Iterate over each timepoint in the prediction horizon
         for i in range(len(predictions)):
-            prediction = predictions[i]
-            label = labels[:, i]
+            prediction = predictions[i][:, 1]
+            label = labels[:, i][:, 1]
             weights = sample_weights[:, i]
 
             prediction = prediction[weights]
             label = label[weights]
 
-            self.au_roc.update_state(label, prediction)
-            au_roc += self.au_roc.result()
-            self.au_prc.update_state(label, prediction)
-            au_prc += self.au_prc.result()
+            # Compute auroc and auprc, ignore imputed (or forwarded-filled) labels
+            au_roc += self.compute_au_roc(label, prediction)
+            au_prc += self.compute_au_prc(label, prediction)
 
-            # Reset metrics
-            self.au_roc.reset_states()
-            self.au_prc.reset_states()
-
+        # Return the average auroc and auprc for this prediction horizon
         return au_roc / len(predictions), au_prc / len(predictions)
 
     @property
     def metrics(self):
-        return [self.loss_tracker, self.auroc_tracker, self.auprc_tracker]
+        return [self.loss_tracker, self.val_loss_tracker, self.val_auroc_tracker, self.val_auprc_tracker]
+
+    @tf.function
+    def compute_au_roc(self, labels, predictions):
+        score = tf.numpy_function(roc_auc_score, [labels, predictions], tf.double)
+        return score
+
+    @tf.function
+    def compute_au_prc(self, labels, predictions):
+        score = tf.numpy_function(average_precision_score, [labels, predictions], tf.double)
+        return score
+
