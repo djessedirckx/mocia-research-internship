@@ -53,8 +53,8 @@ class DataCreator():
             traj_windows = []
             mask_windows = []
             for i in range(0, traj_length, self.prediction_horizon):
-                traj_windows.append(traj_features[i:i+self.prediction_horizon+1, :])
-                mask_windows.append(masks_features[i:i+self.prediction_horizon+1, :])
+                traj_windows.append(traj_features[i:i+self.window_length, :])
+                mask_windows.append(masks_features[i:i+self.window_length, :])
 
             # Apply one-hot encoding on the measurement labels (required for loss calculation)
             one_hot_labels = []

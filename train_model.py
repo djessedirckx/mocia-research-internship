@@ -17,11 +17,11 @@ from model.MatchNetConfig import MatchNetConfig
 from model.model_builder import build_model
 
 
-def train(epochs: int, batch_size: int):
+def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
 
     input_file = 'tadpole_challenge/TADPOLE_D1_D2.csv'
     data_preprocessor = DataPreprocessor(input_file, label_forwarding=False)
-    data_creator = DataCreator(window_length=4, prediction_horizon=3)
+    data_creator = DataCreator(window_length=window_length, prediction_horizon=pred_horizon)
 
     study_df, missing_masks = data_preprocessor.preprocess_data()
 
@@ -62,12 +62,12 @@ def train(epochs: int, batch_size: int):
         mask_filters=32,
         cov_filter_size=3,
         mask_filter_size=3,
-        cov_input_shape=(4, 35),
-        mask_input_shape=(4, 35),
+        cov_input_shape=(window_length, 35),
+        mask_input_shape=(window_length, 35),
         dense_units=32,
         conv_blocks=2,
         dense_layers=2,
-        pred_horizon=3,
+        pred_horizon=pred_horizon,
         dropout_rate=0.2,
         l1=0.01,
         l2=0.01,
@@ -131,4 +131,6 @@ def save_statistics(config: MatchNetConfig, model: Model, history: Dict):
 if __name__ == '__main__':
     epochs = 50
     batch_size = 128
-    train(epochs=epochs, batch_size=batch_size)
+    pred_horizon = 1
+    window_length = 3
+    train(epochs=epochs, batch_size=batch_size, window_length=window_length, pred_horizon=pred_horizon)

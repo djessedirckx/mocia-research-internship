@@ -87,8 +87,12 @@ class MatchNet(Model):
         loss = []
 
         # Iterate over each timepoint in the prediction horizon
-        for i in range(len(predictions)):
-            prediction = predictions[i]
+        for i in range(labels.shape[1]):
+            if self.config.pred_horizon == 1:
+                prediction = predictions
+            else:
+                prediction = predictions[i]
+            
             label = labels[:, i]
             weights = sample_weights[:, i]
 
@@ -104,8 +108,12 @@ class MatchNet(Model):
         au_roc_total, au_prc_total, convergence = 0, 0, 0
 
         # Iterate over each timepoint in the prediction horizon
-        for i in range(len(predictions)):
-            prediction = predictions[i][:, 1]
+        for i in range(labels.shape[1]):
+            if self.config.pred_horizon == 1:
+                prediction = predictions[:, 1]
+            else:
+                prediction = predictions[i][:, 1]
+            
             label = labels[:, i][:, 1]
             weights = sample_weights[:, i]
             beta, gamma = convergence_weights[i]
@@ -123,7 +131,7 @@ class MatchNet(Model):
             convergence += (beta * au_roc + gamma * au_prc)
 
         # Return the average auroc and auprc for this prediction horizon
-        return au_roc_total / len(predictions), au_prc_total / len(predictions), convergence
+        return au_roc_total / labels.shape[1], au_prc_total / labels.shape[1], convergence
 
     @property
     def metrics(self):
