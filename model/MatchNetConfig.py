@@ -10,6 +10,8 @@ class MatchNetConfig():
                  cov_input_shape: Tuple[int, int],
                  mask_input_shape: Tuple[int, int],
                  dense_units: int,
+                 conv_blocks: int,
+                 dense_layers: int,
                  pred_horizon: int,
                  dropout_rate: float,
                  l1: float,
@@ -27,6 +29,8 @@ class MatchNetConfig():
         self.cov_input_shape: Tuple[int, int] = cov_input_shape
         self.mask_input_shape: Tuple[int, int] = mask_input_shape
         self.dense_units: int = dense_units
+        self.conv_blocks: int = conv_blocks
+        self.dense_layers: int = dense_layers
         self.pred_horizon: int = pred_horizon
         self.dropout_rate: float = dropout_rate
         self.l1: float = l1

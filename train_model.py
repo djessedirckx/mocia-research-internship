@@ -58,13 +58,15 @@ def train(epochs: int, batch_size: int):
     ]
 
     model_config = MatchNetConfig(
-        cov_filters=32,
-        mask_filters=8,
+        cov_filters=8,
+        mask_filters=32,
         cov_filter_size=3,
         mask_filter_size=3,
         cov_input_shape=(4, 35),
         mask_input_shape=(4, 35),
         dense_units=32,
+        conv_blocks=2,
+        dense_layers=2,
         pred_horizon=3,
         dropout_rate=0.2,
         l1=0.01,

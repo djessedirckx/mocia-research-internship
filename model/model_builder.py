@@ -8,39 +8,34 @@ from model.layers.MCDropout import MCDropout
 
 def build_model(config: MatchNetConfig) -> MatchNet:
 
-    # Conv layers for covariates and masks
+    # Define input blocks
     covariate_input = Input(shape=config.cov_input_shape)
-    covariate_conv = Conv1D(filters=config.cov_filters, kernel_size=config.cov_filter_size, kernel_regularizer=l1_l2(config.l1, config.l2), activation='relu', padding='causal')(covariate_input)
-    covariate_dropout = MCDropout(rate=config.dropout_rate)(covariate_conv)    
-
     mask_input = Input(shape=config.mask_input_shape)
-    mask_conv = Conv1D(filters=config.mask_filters, kernel_size=config.mask_filter_size, kernel_regularizer=l1_l2(config.l1, config.l2), activation='relu', padding='causal')(mask_input)
-    mask_dropout = MCDropout(rate=config.dropout_rate)(mask_conv)
 
-    # Concatenate output from mask branch to main branch
-    concat = Concatenate()([covariate_dropout, mask_dropout])
+    # Create the specified number of convolutional (parallel) streams
+    x_covariate, x_mask = covariate_input, mask_input
+    for _ in range(config.conv_blocks):
+        x_covariate = Conv1D(filters=config.cov_filters, kernel_size=config.cov_filter_size, kernel_regularizer=l1_l2(config.l1, config.l2), activation='relu', padding='causal')(x_covariate)
+        x_covariate = MCDropout(rate=config.dropout_rate)(x_covariate)    
 
-    # Second convolutional layer
-    covariate_conv = Conv1D(filters=config.cov_filters, kernel_size=config.cov_filter_size, kernel_regularizer=l1_l2(config.l1, config.l2), activation='relu', padding='causal')(concat)
-    covariate_dropout = MCDropout(rate=config.dropout_rate)(covariate_conv)
-    
-    mask_conv = Conv1D(filters=config.mask_filters, kernel_size=config.mask_filter_size, kernel_regularizer=l1_l2(config.l1, config.l2), activation='relu', padding='causal')(mask_conv)
-    mask_dropout = MCDropout(rate=config.dropout_rate)(mask_conv)
+        x_mask = Conv1D(filters=config.mask_filters, kernel_size=config.mask_filter_size, kernel_regularizer=l1_l2(config.l1, config.l2), activation='relu', padding='causal')(x_mask)
+        x_mask = MCDropout(rate=config.dropout_rate)(x_mask)
 
-    # Concatenate output from mask branch to main branch
-    concat = Concatenate()([covariate_dropout, mask_dropout])
+        # Concatenate output from mask branch to main branch
+        x_covariate = Concatenate()([x_covariate, x_mask])
 
     # Dense layers
-    flatten = Flatten()(concat)
-    dense = Dense(units=config.dense_units, activation='relu', kernel_regularizer=l1_l2(config.l1, config.l2),)(flatten)
-    dense_dropout = MCDropout(rate=config.dropout_rate)(dense)
-    dense = Dense(units=config.dense_units, activation='relu', kernel_regularizer=l1_l2(config.l1, config.l2),)(dense_dropout)
-    dense_dropout = MCDropout(rate=config.dropout_rate)(dense)
+    x_covariate = Flatten()(x_covariate)
+
+    # Create the specified number of dense layers
+    for _ in range(config.dense_layers):
+        x_covariate = Dense(units=config.dense_units, activation='relu', kernel_regularizer=l1_l2(config.l1, config.l2))(x_covariate)
+        x_covariate = MCDropout(rate=config.dropout_rate)(x_covariate)
 
     # Define output layers based on specified prediction horizon
     output_layers = []
     for i in range(config.pred_horizon):
-        output = Dense(units=2, activation='softmax', kernel_regularizer=l1_l2(config.l1, config.l2))(dense_dropout)
+        output = Dense(units=2, activation='softmax', kernel_regularizer=l1_l2(config.l1, config.l2))(x_covariate)
         output_layers.append(output)
 
     # Construct and return model
