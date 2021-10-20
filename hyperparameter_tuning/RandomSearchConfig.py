@@ -19,4 +19,5 @@ class RandomSearchConfig():
         self.oversample_ratio = [None, 1, 2, 3, 5, 10]
         self.connected_width = [32, 64, 128, 256, 512]
         self.conv_filter_width = [3, 4, 5, 6, 7, 8, 9, 10]
-        self.sliding_window_width = [3, 4, 5, 6, 7, 8, 9, 10]
+
+        self.output_folder = f'window_size_{cov_input_shape[0]}'
