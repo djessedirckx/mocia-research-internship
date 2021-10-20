@@ -58,6 +58,7 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
     ]
 
     model_config = MatchNetConfig(
+        pred_horizon=pred_horizon,
         cov_filters=8,
         mask_filters=32,
         cov_filter_size=3,
@@ -67,7 +68,6 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
         dense_units=32,
         conv_blocks=2,
         dense_layers=2,
-        pred_horizon=pred_horizon,
         dropout_rate=0.2,
         l1=0.01,
         l2=0.01,
