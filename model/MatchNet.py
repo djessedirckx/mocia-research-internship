@@ -28,7 +28,7 @@ class MatchNet(Model):
         self.convergence_tracker = Mean(name="convergence_metric")
 
         # Store config
-        self.config = config
+        self.config: MatchNetConfig = config
 
     def train_step(self, data):
         # Unpack the data
