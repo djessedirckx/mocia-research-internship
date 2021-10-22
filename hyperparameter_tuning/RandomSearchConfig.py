@@ -3,7 +3,7 @@ from typing import Tuple
 
 class RandomSearchConfig():
 
-    def __init__(self, cov_input_shape: Tuple, mask_input_shape: Tuple) -> None:
+    def __init__(self, cov_input_shape: Tuple, mask_input_shape: Tuple, date: str) -> None:
         self.cov_input_shape = cov_input_shape
         self.mask_input_shape = mask_input_shape
 
@@ -20,4 +20,5 @@ class RandomSearchConfig():
         self.connected_width = [32, 64, 128, 256, 512]
         self.conv_filter_width = [3, 4, 5, 6, 7, 8, 9, 10]
 
-        self.output_folder = f'window_size_{cov_input_shape[0]}'
+        # Add current datetime in isoformat to distinguish between runs
+        self.output_folder = f'window_size_{cov_input_shape[0]}-{date}'

@@ -3,8 +3,9 @@ from typing import List
 import kerastuner as kt
 import numpy as np
 import pandas as pd
-import tensorflow as tf
+from tensorflow.keras import callbacks
 
+from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.model_selection import StratifiedKFold
 
 from eda_preprocessing.DataCreator import DataCreator
@@ -20,6 +21,11 @@ class MatchNetTuner(kt.Tuner):
 
     def run_trial(self, trial, trajectories, trajectory_labels, study_df, missing_masks, *fit_args, **fit_kwargs):
         kfold = StratifiedKFold(n_splits=4, shuffle=True, random_state=42)
+        hp = trial.hyperparameters
+
+        # Define hyperparameter search ranges for batch size and early stopping patience
+        batch_size = hp.Choice('batch_size', [32, 64, 128, 256, 512])
+        stopping_patience = hp.Choice('stopping_patience', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
         loss, au_roc, au_prc, convergence_metric = [], [], [], []
         for train_idx, val_idx in kfold.split(trajectories, trajectory_labels):
@@ -35,9 +41,12 @@ class MatchNetTuner(kt.Tuner):
             validation_data = [val_windows, val_masks]
             validation_labels = val_measurement_labels
 
+            # Initialise model and earlystopping callback
             model = self.hypermodel.build(trial.hyperparameters)
-            model.fit(x=train_data, y=train_labels, batch_size=128, epochs=5, sample_weight=train_true_labels, validation_data=(
-                validation_data, validation_labels, val_true_labels), validation_batch_size=len(val_true_labels))
+            early_stopping=EarlyStopping(monitor = 'val_convergence_metric', patience = stopping_patience, verbose = 1, mode = 'max')
+
+            model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=5, sample_weight=train_true_labels, validation_data=(
+                validation_data, validation_labels, val_true_labels), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
 
             # Evaluate model
             evaluation_results = model.evaluate(
