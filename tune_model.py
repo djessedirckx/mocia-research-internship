@@ -1,7 +1,7 @@
-import os
+import argparse
 
 from datetime import datetime
-from typing import Dict, List
+from typing import List
 
 import keras_tuner as kt
 import numpy as np
@@ -15,7 +15,6 @@ from hyperparameter_tuning.MatchNetTuner import MatchNetTuner
 from hyperparameter_tuning.RandomSearchConfig import RandomSearchConfig
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
-from model.MatchNet import MatchNet
 from model.MatchNetConfig import MatchNetConfig
 
 
@@ -67,51 +66,19 @@ def random_search(matchnet_config: MatchNetConfig):
     # Execute cross-validated random hyperparameter search
     tuner.search(trajectories=np.array(train_trajectories), trajectory_labels=train_labels, study_df=study_df, missing_masks=missing_masks)
 
-    # Obtain best model
-    best_model = tuner.get_best_models()[0]
-
-    # Evaluate model on test data
-    window_length = best_model.layers[0].input_shape[0][1]
-    data_creator = DataCreator(
-        window_length=window_length, prediction_horizon=matchnet_config.pred_horizon)
-    test_measurement_labels, test_true_labels, test_windows, test_masks = prepare_data(
-        data_creator, study_df, missing_masks, test_trajectories)
-
-    test_results=best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight = test_true_labels,
-            batch_size = len(test_true_labels))
-
+    # Show hyperparameters of 10 best trials
     tuner.results_summary(num_trials=10)
-
-    # Store results
-    save_statistics(matchnet_config, best_model, test_results, tuner.get_best_hyperparameters(num_trials=1)[0], now)
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
     windows=study_df.loc[study_df['PTID'].isin(trajectories)]
     masks=missing_masks.loc[missing_masks['PTID'].isin(trajectories)]
     return data_creator.create_data(windows, masks)
 
-def save_statistics(config: MatchNetConfig, model: MatchNet, scores: List, hyperparameters: List, now: str):
-
-    # Create output directory based on current date and time
-    path = os.path.join(config.output_path, now)
-    os.makedirs(path)
-
-    # Save all statistics as binary numpy files
-    test_scores = {
-        'loss': scores[0],
-        'au_roc': scores[3],
-        'au_prc': scores[2],
-        'convergence': scores[1]
-    }
-    np.save(f'{path}/test_scores', test_scores)
-    np.save(f'{path}/test_hyperparams', hyperparameters)
-
-    # Store model
-    model.save(f'{path}/model.hdf5')
-
-    print(f'Stored output in {path}, training finished')
-
 if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(description='Tune MATCH-net hyperparameters for a desired prediction horizon')
+    parser.add_argument('--prediction_horizon', type=int, help='Number of events in the future to predict')
+    args = parser.parse_args()
 
     # TODO --> make dynamic
     convergence_weights=[
@@ -122,7 +89,7 @@ if __name__ == '__main__':
         (1, 1)
     ]
     matchnet_config= MatchNetConfig(
-        pred_horizon = 1, convergence_weights = convergence_weights, val_frequency = 5,
+        pred_horizon = args.prediction_horizon, convergence_weights = convergence_weights,
         output_path='output/test_set')
 
     random_search(matchnet_config)

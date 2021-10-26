@@ -24,7 +24,7 @@ class MatchNetHyperModel(kt.HyperModel):
         window_length = hp.Choice('window_length', self.search_config.window_length)
 
         covariate_input = Input(shape=(window_length, 35)) # TODO --> put 35 in config/compute
-        mask_input = Input(shape=(window_length, 35))
+        mask_input = Input(shape=(window_length, 22))
 
         # Create the specified number of convolutional (parallel) streams
         x_covariate, x_mask = covariate_input, mask_input

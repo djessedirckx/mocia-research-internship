@@ -3,7 +3,6 @@ from typing import List
 import kerastuner as kt
 import numpy as np
 import pandas as pd
-from tensorflow.keras import callbacks
 
 from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.model_selection import StratifiedKFold
