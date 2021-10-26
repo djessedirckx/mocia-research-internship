@@ -17,9 +17,6 @@ class DataCreator():
     def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame) -> Tuple[np.array, np.array, np.array, np.array]:
         measurement_labels, true_labels, feature_window_set, mask_window_set = [], [], [], []
 
-        # Apply one-hot encoding on measurement labels
-        enc = OneHotEncoder()
-        enc.fit(np.array([0, 1]).reshape(-1, 1))
 
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
@@ -38,7 +35,7 @@ class DataCreator():
                 remainder = np.expand_dims(remainder, axis=0)
                 pred_horizons = np.concatenate((pred_horizons, remainder))
 
-            # One-hot encode event labels. Store index of imputed labels for later loss calculation
+            # Impute nan values. Store index of imputed labels for later loss calculation
             true_labels.append(~np.isnan(pred_horizons))
             pred_horizons = np.nan_to_num(pred_horizons)
 
@@ -50,28 +47,28 @@ class DataCreator():
             masks_features = self.extrapolate_values(masks)
 
             # Construct feature windows based on the desired prediction horizon
-            traj_windows = []
-            mask_windows = []
+            traj_windows, mask_windows = [], []
             for i in range(0, traj_length, self.prediction_horizon):
                 traj_windows.append(traj_features[i:i+self.window_length, :])
                 mask_windows.append(masks_features[i:i+self.window_length, :])
 
-            # Apply one-hot encoding on the measurement labels (required for loss calculation)
-            one_hot_labels = []
-            for column in pred_horizons.transpose():
-                one_hot_labels.append(enc.transform(column.reshape(-1, 1)).toarray())
-            one_hot_labels = np.concatenate(one_hot_labels, axis=1).reshape(len(pred_horizons), self.prediction_horizon, 2)
-
-            measurement_labels.append(one_hot_labels)
+            measurement_labels.extend(pred_horizons)
             feature_window_set.append(traj_windows)
             mask_window_set.append(mask_windows)
 
-        measurement_labels = np.array(list(itertools.chain.from_iterable(measurement_labels)))
+        # Apply one-hot encoding on measurement labels
+        enc = OneHotEncoder()
+        one_hot_labels = []
+        for column in np.transpose(measurement_labels):
+            one_hot = enc.fit_transform(column.reshape(-1, 1)).toarray()
+            one_hot_labels.append(one_hot)
+
+        one_hot_labels = np.concatenate(one_hot_labels, axis=1).reshape(len(measurement_labels), self.prediction_horizon, 2)
         true_labels = np.array(list(itertools.chain.from_iterable(true_labels)))
         feature_window_set = np.array(list(itertools.chain.from_iterable(feature_window_set)))
         mask_window_set = np.array(list(itertools.chain.from_iterable(mask_window_set)))
 
-        return measurement_labels, true_labels, feature_window_set, mask_window_set
+        return one_hot_labels, true_labels, feature_window_set, mask_window_set
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
         traj_features = trajectory.iloc[:, 3:-1].values
