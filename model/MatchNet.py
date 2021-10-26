@@ -131,7 +131,7 @@ class MatchNet(Model):
             convergence += (beta * au_roc + gamma * au_prc)
 
         # Return the average auroc and auprc for this prediction horizon
-        return au_roc_total / labels.shape[1], au_prc_total / labels.shape[1], convergence
+        return au_roc_total / labels.shape[1], au_prc_total / labels.shape[1], convergence / labels.shape[1]
 
     @property
     def metrics(self):
