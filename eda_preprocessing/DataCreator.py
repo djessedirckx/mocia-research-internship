@@ -17,7 +17,6 @@ class DataCreator():
     def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame) -> Tuple[np.array, np.array, np.array, np.array]:
         measurement_labels, true_labels, feature_window_set, mask_window_set = [], [], [], []
 
-
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
 

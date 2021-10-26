@@ -78,31 +78,9 @@ class DataPreprocessor():
         # Set all missing values to 1, present values to 0
         missing_masks = missing_masks.isnull().astype('int')
 
-        assert (missing_masks == 1).equals(
-            feature_set.isna()), 'Ḿasking is incorrect'
-
-        # Apply one-hot encoding on categorical features
-        # One-hot encode categorical features
-        ohe_features = None
-
-        for column in feature_set.columns[3:7]:
-            encoded_feature = pd.get_dummies(
-                feature_set[column], prefix=column, dummy_na=True)
-
-            # Encode missing values as all ones
-            encoded_feature.loc[encoded_feature[f'{column}_nan'] == 1] = np.ones(
-                encoded_feature.shape[1])
-
-            # Encode present values as all zeros
-            encoded_feature.loc[encoded_feature[f'{column}_nan'] == 1] = np.zeros(
-                encoded_feature.shape[1])
-
-            ohe_features = pd.concat(
-                [ohe_features, encoded_feature.iloc[:, :-1]], axis=1)
-
-        # Concat one-hot encoded features and drop original categorical columns
-        missing_masks = pd.concat([missing_masks, ohe_features], axis=1)
-        missing_masks = missing_masks.drop(missing_masks.columns[3:7], axis=1)
+        # Sanity checks
+        assert (missing_masks == 1).equals(feature_set.isnull()), 'Incorrect missing values in masks'
+        assert (missing_masks == 0).equals(feature_set.notnull()), 'Incorrect present values in masks'
 
         return missing_masks
 
