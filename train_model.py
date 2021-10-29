@@ -1,6 +1,8 @@
+import argparse
 import os
 
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List
 
 import numpy as np
@@ -13,16 +15,17 @@ from sklearn.model_selection import train_test_split
 
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
-from model.MatchNetConfig import MatchNetConfig
+from model.config.MatchNetConfig import MatchNetConfig
 from model.model_builder import build_model
+from util.config_utils import get_train_config
 
 
-def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
+def train(epochs: int, batch_size: int, model_config: MatchNetConfig):
 
     input_file = 'tadpole_challenge/TADPOLE_D1_D2.csv'
     data_preprocessor = DataPreprocessor(input_file, label_forwarding=False)
     data_creator = DataCreator(
-        window_length=window_length, prediction_horizon=pred_horizon)
+        window_length=model_config.window_length, prediction_horizon=model_config.pred_horizon)
 
     study_df, missing_masks = data_preprocessor.preprocess_data()
 
@@ -51,36 +54,9 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
     test_measurement_labels, test_true_labels, test_windows, test_masks = prepare_data(
         data_creator, study_df, missing_masks, test_trajectories)
 
-    # Create MatchnetConfiguration
-    convergence_weights = [
-        (1, 1),
-        (1, 1),
-        (1, 1),
-    ]
-
-    model_config = MatchNetConfig(
-        pred_horizon=pred_horizon,
-        cov_filters=256,
-        mask_filters=32,
-        cov_filter_size=3,
-        mask_filter_size=3,
-        cov_input_shape=(window_length, 35),
-        mask_input_shape=(window_length, 22),
-        dense_units=64,
-        conv_blocks=1,
-        dense_layers=4,
-        dropout_rate=0.1,
-        l1=0.0003,
-        l2=0.003,
-        convergence_weights=convergence_weights,
-        val_frequency=10,
-        mc_repeats=10,
-        output_path='output')
-
-    optimizer = Adam(learning_rate=0.001)
-
     # Create the model
     model = build_model(model_config)
+    optimizer = Adam(learning_rate=model_config.learning_rate)
     model.compile(optimizer=optimizer)
 
     train_data = [train_windows, train_masks]
@@ -126,7 +102,7 @@ def save_statistics(config: MatchNetConfig, model: Model, history: Dict):
     now = datetime.now().isoformat()
 
     # Create output directory based on current date and time
-    path = os.path.join(config.output_path, now)
+    path = os.path.join(config.output_path, f'test_statistics_{config.pred_horizon}_{now}')
     os.makedirs(path)
 
     # Save all statistics as binary numpy files
@@ -142,9 +118,12 @@ def save_statistics(config: MatchNetConfig, model: Model, history: Dict):
 
 
 if __name__ == '__main__':
-    epochs = 50
-    batch_size = 32
-    pred_horizon = 3
-    window_length = 4
-    train(epochs=epochs, batch_size=batch_size,
-          window_length=window_length, pred_horizon=pred_horizon)
+    parser = argparse.ArgumentParser(description='Train MATCH-net model using a predefined configuration')
+    parser.add_argument('--config_file', type=Path, help='Path to configuration file')
+    parser.add_argument('--epochs', type=int, help='Maximum training epochs')
+    parser.add_argument('--batch_size', type=int, help='Batch size used during training')
+    args = parser.parse_args()
+
+    # Read model configuration and train model
+    model_config = get_train_config(args.config_file)
+    train(epochs=args.epochs, batch_size=args.batch_size, model_config=model_config)

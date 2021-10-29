@@ -2,7 +2,7 @@ from tensorflow.keras.layers import Conv1D, Dense, Concatenate, Input, Flatten
 from tensorflow.keras.regularizers import l1_l2
 
 from model.MatchNet import MatchNet
-from model.MatchNetConfig import MatchNetConfig
+from model.config.MatchNetConfig import MatchNetConfig
 from model.layers.MCDropout import MCDropout
 
 

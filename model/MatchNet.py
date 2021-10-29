@@ -7,7 +7,7 @@ from tensorflow.keras.losses import CategoricalCrossentropy
 from tensorflow.keras.metrics import Mean
 from tensorflow.keras.models import Model
 
-from model.MatchNetConfig import MatchNetConfig
+from model.config.MatchNetConfig import MatchNetConfig
 
 
 class MatchNet(Model):
