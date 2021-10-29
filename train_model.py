@@ -6,7 +6,7 @@ from typing import Dict, List
 import numpy as np
 import pandas as pd
 
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
@@ -21,7 +21,8 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
 
     input_file = 'tadpole_challenge/TADPOLE_D1_D2.csv'
     data_preprocessor = DataPreprocessor(input_file, label_forwarding=False)
-    data_creator = DataCreator(window_length=window_length, prediction_horizon=pred_horizon)
+    data_creator = DataCreator(
+        window_length=window_length, prediction_horizon=pred_horizon)
 
     study_df, missing_masks = data_preprocessor.preprocess_data()
 
@@ -49,13 +50,6 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
         data_creator, study_df, missing_masks, val_trajectories)
     test_measurement_labels, test_true_labels, test_windows, test_masks = prepare_data(
         data_creator, study_df, missing_masks, test_trajectories)
-
-    # np.save('test_measurement_labels', test_measurement_labels)
-    # np.save('test_true_labels', test_true_labels)
-    # np.save('test_windows', test_windows)
-    # np.save('test_masks', test_masks)
-
-    # assert False
 
     # Create MatchnetConfiguration
     convergence_weights = [
@@ -95,24 +89,30 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
     validation_labels = val_measurement_labels
 
     # Define early stopping callback
-    early_stopping = EarlyStopping(monitor='val_convergence_metric', patience=model_config.val_frequency, verbose=1, mode='max')
+    early_stopping = EarlyStopping(
+        monitor='val_convergence_metric', patience=model_config.val_frequency, verbose=1, mode='max')
+
+    # Define model checkpoint path for storing best weights
+    checkpoint_path = f'{model_config.output_path}/{model_config.pred_horizon}'
+    model_checkpoint = ModelCheckpoint(
+        filepath=checkpoint_path,
+        save_weights_only=True,
+        save_best_only=True,
+        monitor='val_convergence_metric',
+        mode='max'
+    )
 
     history = model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=epochs, sample_weight=train_true_labels, validation_data=(
-        validation_data, validation_labels, val_true_labels), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
+        validation_data, validation_labels, val_true_labels), validation_batch_size=len(val_true_labels), callbacks=[early_stopping, model_checkpoint])
 
     # Evaluate on test data
     print('Evaluating on test data...')
-    # predictions = model.predict([test_windows, test_masks])
-
-    # np.save('test_predictions', predictions)
-    # np.save('test_labels2', test_measurement_labels)
-    # np.save('test_weights', test_true_labels)
-
+    model.load_weights(checkpoint_path)
     model.evaluate([test_windows, test_masks], test_measurement_labels,
-          sample_weight=test_true_labels, batch_size=len(test_true_labels))
+                   sample_weight=test_true_labels, batch_size=len(test_true_labels))
 
     # Store output and model
-    # save_statistics(model_config, model, history)
+    save_statistics(model_config, model, history)
 
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
@@ -146,4 +146,5 @@ if __name__ == '__main__':
     batch_size = 32
     pred_horizon = 3
     window_length = 4
-    train(epochs=epochs, batch_size=batch_size, window_length=window_length, pred_horizon=pred_horizon)
+    train(epochs=epochs, batch_size=batch_size,
+          window_length=window_length, pred_horizon=pred_horizon)
