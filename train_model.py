@@ -50,6 +50,13 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
     test_measurement_labels, test_true_labels, test_windows, test_masks = prepare_data(
         data_creator, study_df, missing_masks, test_trajectories)
 
+    # np.save('test_measurement_labels', test_measurement_labels)
+    # np.save('test_true_labels', test_true_labels)
+    # np.save('test_windows', test_windows)
+    # np.save('test_masks', test_masks)
+
+    # assert False
+
     # Create MatchnetConfiguration
     convergence_weights = [
         (1, 1),
@@ -59,24 +66,24 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
 
     model_config = MatchNetConfig(
         pred_horizon=pred_horizon,
-        cov_filters=8,
+        cov_filters=256,
         mask_filters=32,
         cov_filter_size=3,
         mask_filter_size=3,
         cov_input_shape=(window_length, 35),
-        mask_input_shape=(window_length, 35),
-        dense_units=32,
-        conv_blocks=2,
-        dense_layers=2,
-        dropout_rate=0.2,
-        l1=0.01,
-        l2=0.01,
+        mask_input_shape=(window_length, 22),
+        dense_units=64,
+        conv_blocks=1,
+        dense_layers=4,
+        dropout_rate=0.1,
+        l1=0.0003,
+        l2=0.003,
         convergence_weights=convergence_weights,
-        val_frequency=5,
+        val_frequency=10,
         mc_repeats=10,
         output_path='output')
 
-    optimizer = Adam()
+    optimizer = Adam(learning_rate=0.001)
 
     # Create the model
     model = build_model(model_config)
@@ -95,11 +102,17 @@ def train(epochs: int, batch_size: int, pred_horizon: int, window_length: int):
 
     # Evaluate on test data
     print('Evaluating on test data...')
+    # predictions = model.predict([test_windows, test_masks])
+
+    # np.save('test_predictions', predictions)
+    # np.save('test_labels2', test_measurement_labels)
+    # np.save('test_weights', test_true_labels)
+
     model.evaluate([test_windows, test_masks], test_measurement_labels,
           sample_weight=test_true_labels, batch_size=len(test_true_labels))
 
     # Store output and model
-    save_statistics(model_config, model, history)
+    # save_statistics(model_config, model, history)
 
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
@@ -130,7 +143,7 @@ def save_statistics(config: MatchNetConfig, model: Model, history: Dict):
 
 if __name__ == '__main__':
     epochs = 50
-    batch_size = 128
-    pred_horizon = 1
-    window_length = 3
+    batch_size = 32
+    pred_horizon = 3
+    window_length = 4
     train(epochs=epochs, batch_size=batch_size, window_length=window_length, pred_horizon=pred_horizon)
