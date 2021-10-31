@@ -88,7 +88,7 @@ class DataPreprocessor():
             one_hot.loc[one_hot[f'{column}_nan'] == 1] = np.ones(one_hot.shape[1])
 
             # Encode present values as all zeros
-            one_hot.loc[one_hot[f'{column}_nan'] == 1] = np.zeros(one_hot.shape[1])
+            one_hot.loc[one_hot[f'{column}_nan'] == 0] = np.zeros(one_hot.shape[1])
 
             ohe_features.append(one_hot.iloc[:, :-1])
 
