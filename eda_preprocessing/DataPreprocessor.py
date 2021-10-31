@@ -14,6 +14,7 @@ class DataPreprocessor():
 
     def preprocess_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
         study_df = self.load_data(self.input_path)
+        study_df = study_df.sort_values(by=['Month'])
 
         # Split data into meta and feature data
         meta_data = study_df.iloc[:, 0:2]
@@ -43,11 +44,8 @@ class DataPreprocessor():
         if not self.label_forwarding:
             study_df = self.remove_timesteps(study_df)
 
-        # Reset index of both dataframes
-        study_df.reset_index(inplace=True)
-        missing_masks.reset_index(inplace=True)
-
         print('Finished initial pre-processing of the data')
+
         return study_df, missing_masks
 
     def load_data(self, input_path: Path) -> pd.DataFrame:
@@ -82,21 +80,37 @@ class DataPreprocessor():
         assert (missing_masks == 1).equals(feature_set.isnull()), 'Incorrect missing values in masks'
         assert (missing_masks == 0).equals(feature_set.notnull()), 'Incorrect present values in masks'
 
+        ohe_features = []
+        for column in feature_set.columns[3:7]:
+            one_hot = pd.get_dummies(feature_set[column], prefix=column, dummy_na=True)
+
+            # Encode missing values as all ones
+            one_hot.loc[one_hot[f'{column}_nan'] == 1] = np.ones(one_hot.shape[1])
+
+            # Encode present values as all zeros
+            one_hot.loc[one_hot[f'{column}_nan'] == 1] = np.zeros(one_hot.shape[1])
+
+            ohe_features.append(one_hot.iloc[:, :-1])
+
+        ohe_features = pd.concat(ohe_features, axis=1)
+
+        # Drop categorical columns and insert one_hot encoded masks
+        missing_masks = missing_masks.drop(missing_masks.columns[3:7], axis=1)
+        missing_masks = pd.concat([missing_masks.iloc[:, 0:3], ohe_features, missing_masks.iloc[:, 3:]], axis=1)
+
         return missing_masks
 
     def impute_data(self, study_df: pd.DataFrame, feature_set: pd.DataFrame) -> pd.DataFrame:
         print('Imputing missing values...')
 
         # Use zero-order interpolation on the data (execute per patient)
-        for pt in tqdm(study_df['PTID'].unique()):
-            events = study_df.loc[study_df['PTID'] == pt]
+        for _, events in tqdm(study_df.groupby('PTID')):
             feature_set.loc[events.index, feature_set.columns] = events[feature_set.columns].fillna(
                 method='ffill')
 
         # Fill remaining numerical column nan values with mean of all measurements
         for column in feature_set.columns[np.r_[0, 2:3, 7:22]]:
-            feature_set[column].fillna(
-                feature_set[column].mean(), inplace=True)
+            feature_set[column].fillna(feature_set[column].mean(), inplace=True)
 
         # Apply data imputation on APOE4 column. Values are replaced based on their probability of occurence
         apoe4_stats = feature_set['APOE4'].value_counts()
@@ -119,18 +133,18 @@ class DataPreprocessor():
 
     def normalise_and_encode_data(self, feature_set: pd.DataFrame) -> pd.DataFrame:
         print('Normalising and encoding data...')
+        
         # Normalize numerical features
         for column in feature_set.columns[np.r_[0:3, 7:22]]:
             feature_set[column] = (
                 feature_set[column] - feature_set[column].mean()) / feature_set[column].std()
 
         # One-hot encode categorical features
-        for column in feature_set.columns[3:7]:
-            feature_set = pd.concat([feature_set, pd.get_dummies(
-                feature_set[column], prefix=column)], axis=1)
+        ohe_features = pd.concat([pd.get_dummies(feature_set[column], prefix=column) for column in feature_set.columns[3:7]], axis=1)
 
-        # Drop categorical columns
+        # Drop categorical columns and insert one_encoded features
         feature_set = feature_set.drop(feature_set.columns[3:7], axis=1)
+        feature_set = pd.concat([feature_set.iloc[:, 0:3], ohe_features, feature_set.iloc[:, 3:]], axis=1)
 
         return feature_set
 

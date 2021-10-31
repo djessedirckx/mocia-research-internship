@@ -19,7 +19,6 @@ class DataCreator():
 
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
-
             traj_labels = trajectory['DX'].values
             mod = traj_labels.shape[0] % self.prediction_horizon
             max_divisble = traj_labels.shape[0] - mod
@@ -70,7 +69,8 @@ class DataCreator():
         return one_hot_labels, true_labels, feature_window_set, mask_window_set
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
-        traj_features = trajectory.iloc[:, 3:-1].values
-        first_column = traj_features[0, :]
-        extrapolated_values = np.tile(first_column, (self.window_length, 1))
+        # Get feature columns (ignore ptid, dx and month)
+        traj_features = trajectory.iloc[:, 2:-1].values
+        first_row = traj_features[0, :]
+        extrapolated_values = np.tile(first_row, (self.window_length, 1))
         return np.concatenate((extrapolated_values, traj_features))

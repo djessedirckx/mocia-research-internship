@@ -36,8 +36,7 @@ def train(epochs: int, batch_size: int, model_config: MatchNetConfig):
 
     trajectory_labels, ptids = [], []
     for ptid, trajectory in study_df.groupby("PTID"):
-        trajectory_labels.append(
-            1) if 1 in trajectory['DX'].values else trajectory_labels.append(0)
+        trajectory_labels.append(1) if 1 in trajectory['DX'].values else trajectory_labels.append(0)
         ptids.append(ptid)
 
     # Split data into train, val & test
