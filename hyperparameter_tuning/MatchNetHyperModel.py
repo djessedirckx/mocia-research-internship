@@ -7,7 +7,7 @@ from tensorflow.keras.regularizers import l1_l2
 
 from hyperparameter_tuning.RandomSearchConfig import RandomSearchConfig
 from model.MatchNet import MatchNet
-from model.MatchNetConfig import MatchNetConfig
+from model.config.MatchNetConfig import MatchNetConfig
 from model.layers.MCDropout import MCDropout
 
 class MatchNetHyperModel(kt.HyperModel):
@@ -23,8 +23,8 @@ class MatchNetHyperModel(kt.HyperModel):
         # Define input blocks
         window_length = hp.Choice('window_length', self.search_config.window_length)
 
-        covariate_input = Input(shape=(window_length, 35)) # TODO --> put 35 in config/compute
-        mask_input = Input(shape=(window_length, 22))
+        covariate_input = Input(shape=(window_length, self.matchnet_config.cov_input_shape[1]))
+        mask_input = Input(shape=(window_length, self.matchnet_config.mask_input_shape[1]))
 
         # Create the specified number of convolutional (parallel) streams
         x_covariate, x_mask = covariate_input, mask_input

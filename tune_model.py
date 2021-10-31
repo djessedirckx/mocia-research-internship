@@ -15,7 +15,7 @@ from hyperparameter_tuning.MatchNetTuner import MatchNetTuner
 from hyperparameter_tuning.RandomSearchConfig import RandomSearchConfig
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
-from model.MatchNetConfig import MatchNetConfig
+from model.config.MatchNetConfig import MatchNetConfig
 
 
 def random_search(matchnet_config: MatchNetConfig):
@@ -80,16 +80,10 @@ if __name__ == '__main__':
     parser.add_argument('--prediction_horizon', type=int, help='Number of events in the future to predict')
     args = parser.parse_args()
 
-    # TODO --> make dynamic
-    convergence_weights=[
-        (1, 1),
-        (1, 1),
-        (1, 1),
-        (1, 1),
-        (1, 1)
-    ]
     matchnet_config= MatchNetConfig(
-        pred_horizon = args.prediction_horizon, convergence_weights = convergence_weights,
+        cov_input_features=35,
+        mask_input_features=35,
+        pred_horizon = args.prediction_horizon,
         output_path='output/test_set')
 
     random_search(matchnet_config)

@@ -4,7 +4,7 @@ from typing import Tuple, List
 class MatchNetConfig():
 
     def __init__(self, pred_horizon: int,
-                 window_length: int,
+                 window_length: int = None,
                  cov_filters: int = None,
                  mask_filters: int = None,
                  cov_filter_size: int = None,
