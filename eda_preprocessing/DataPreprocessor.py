@@ -16,6 +16,18 @@ class DataPreprocessor():
         study_df = self.load_data(self.input_path)
         study_df = study_df.sort_values(by=['Month'])
 
+        # Remove entries without labels or starting AD meassurement
+        invalid_entries = []
+        for _, trajectory in study_df.groupby("PTID"):
+            labels = trajectory['DX']
+
+            # If trajectory has no labels, drop from dataset
+            first_label_index = labels.first_valid_index()
+            if first_label_index == None or labels.loc[first_label_index] == 'Dementia':
+                invalid_entries.extend(trajectory.index.values)
+
+        study_df.drop(invalid_entries, inplace=True)
+
         # Split data into meta and feature data
         meta_data = study_df.iloc[:, 0:2]
         months = study_df.iloc[:, -1]
