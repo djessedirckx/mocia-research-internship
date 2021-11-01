@@ -60,7 +60,7 @@ def random_search(matchnet_config: MatchNetConfig):
         oracle=tuner_oracle,
         hypermodel=search_model,
         prediction_horizon=matchnet_config.pred_horizon,
-        directory='output/random_search',
+        directory='/ceph/csedu-scratch/project/ddirckx/random_search',
         project_name=search_config.output_folder)
 
     # Execute cross-validated random hyperparameter search
