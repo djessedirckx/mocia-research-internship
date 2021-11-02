@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from keras_tuner.oracles import RandomSearch
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 
 from hyperparameter_tuning.MatchNetHyperModel import MatchNetHyperModel
 from hyperparameter_tuning.MatchNetTuner import MatchNetTuner
@@ -18,7 +18,7 @@ from eda_preprocessing.DataCreator import DataCreator
 from model.config.MatchNetConfig import MatchNetConfig
 
 
-def random_search(matchnet_config: MatchNetConfig):
+def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials: int = 100):
 
     # Load data and perform initial pre-processing
     input_file = 'tadpole_challenge/TADPOLE_D1_D2.csv'
@@ -29,9 +29,6 @@ def random_search(matchnet_config: MatchNetConfig):
     now = datetime.now().isoformat()
 
     print(f'\nExecuting randomsearch for prediction_horizon={matchnet_config.pred_horizon}\n')
-
-    # Create configuration for the desired sliding window length
-    search_config = RandomSearchConfig(now, matchnet_config.pred_horizon)
 
     # Make label binary, mark all Dementia instances as positive
     study_df['DX'] = study_df['DX'].replace('Dementia', 1)
@@ -44,30 +41,55 @@ def random_search(matchnet_config: MatchNetConfig):
             1) if 1 in trajectory['DX'].values else trajectory_labels.append(0)
         ptids.append(ptid)
 
-    # Split data into train/validation & test
-    train_trajectories, test_trajectories, train_labels, test_labels = train_test_split(
-        ptids, trajectory_labels, test_size=0.2, random_state=42, stratify=trajectory_labels)
+    trajectory_labels = np.array(trajectory_labels)
+    ptids = np.array(ptids)
 
-    # Configure search
-    tuner_oracle = RandomSearch(
-        objective=kt.Objective('val_convergence_metric', direction='max'),
-        max_trials=100, # TODO --> make hyperparameter
-        seed=42
-    )
+    kfold = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    au_rocs = np.zeros(n_splits)
+    au_prcs = np.zeros(n_splits)
+    for cross_run, (train_idx, test_idx) in enumerate(kfold.split(ptids, trajectory_labels)):
+        train_trajectories = ptids[train_idx]
+        train_trajectory_labels = trajectory_labels[train_idx]
+        test_trajectories = ptids[test_idx]
 
-    search_model = MatchNetHyperModel(search_config, matchnet_config)
-    tuner = MatchNetTuner(
-        oracle=tuner_oracle,
-        hypermodel=search_model,
-        prediction_horizon=matchnet_config.pred_horizon,
-        directory='output/random_search',
-        project_name=search_config.output_folder)
+        # Configure search
+        tuner_oracle = RandomSearch(
+            objective=kt.Objective('val_convergence_metric', direction='max'),
+            max_trials=max_trials,
+            seed=42
+        )
 
-    # Execute cross-validated random hyperparameter search
-    tuner.search(trajectories=np.array(train_trajectories), trajectory_labels=train_labels, study_df=study_df, missing_masks=missing_masks)
+        # Create configuration for the desired sliding window length
+        search_config = RandomSearchConfig(now, matchnet_config.pred_horizon, cross_run)
+        search_model = MatchNetHyperModel(search_config, matchnet_config)
+        tuner = MatchNetTuner(
+            oracle=tuner_oracle,
+            hypermodel=search_model,
+            prediction_horizon=matchnet_config.pred_horizon,
+            directory='output/random_search',
+            project_name=search_config.output_folder)
 
-    # Show hyperparameters of 10 best trials
-    tuner.results_summary(num_trials=10)
+        # Execute cross-validated random hyperparameter search
+        tuner.search(trajectories=train_trajectories, trajectory_labels=train_trajectory_labels, study_df=study_df, missing_masks=missing_masks)
+
+        # Prepare the test data
+        best_model = tuner.get_best_models()[0]
+        window_length = best_model.layers[0].input_shape[0][1]
+        data_creator = DataCreator(window_length, matchnet_config.pred_horizon)
+        test_measurement_labels, test_true_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories)
+
+        # Evaluate best model on test data
+        evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=test_true_labels, batch_size=len(test_true_labels))
+        au_rocs[cross_run] = evaluation_results[3]
+        au_prcs[cross_run] = evaluation_results[2]
+
+        # Show hyperparameters of 10 best trials
+        print(f'Showing best hyperparameters for run: {cross_run+1}/{n_splits}')
+        tuner.results_summary(num_trials=10)
+    
+    print('\nCross validation finished, results on test data:')
+    print(f'AUROC: {np.mean(au_rocs)} - std={np.std(au_rocs)}')
+    print(f'AUPRC: {np.mean(au_prcs)} - std={np.std(au_prcs)}\n')
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
     windows=study_df.loc[study_df['PTID'].isin(trajectories)]
@@ -78,6 +100,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Tune MATCH-net hyperparameters for a desired prediction horizon')
     parser.add_argument('--prediction_horizon', type=int, help='Number of events in the future to predict')
+    parser.add_argument('--cross_val_splits', type=int, help='Number of cross validation splits to use', default=5)
+    parser.add_argument('--max_trials', type=int, help='Max number of trials to perform randomsearch')
     args = parser.parse_args()
 
     matchnet_config= MatchNetConfig(
@@ -86,4 +110,4 @@ if __name__ == '__main__':
         pred_horizon = args.prediction_horizon,
         output_path='output/test_set')
 
-    random_search(matchnet_config)
+    random_search(matchnet_config, n_splits=args.cross_val_splits, max_trials=args.max_trials)

@@ -3,7 +3,7 @@ from typing import Tuple
 
 class RandomSearchConfig():
 
-    def __init__(self, date: str, pred_horizon: int) -> None:
+    def __init__(self, date: str, pred_horizon: int, cross_run: int) -> None:
         self.connected_layers = [1, 2, 3, 4, 5]
         self.conv_layers = [1, 2, 3, 4, 5]
         self.dropout_rate = [0.1, 0.2, 0.3, 0.4, 0.5]
@@ -19,4 +19,4 @@ class RandomSearchConfig():
         self.window_length = [3, 4, 5, 6, 7, 8, 9, 10]
 
         # Add current datetime in isoformat to distinguish between runs
-        self.output_folder = f'pred_horizon_{pred_horizon}--{date}'
+        self.output_folder = f'pred_horizon_{pred_horizon}--{date}--run-{cross_run}'
