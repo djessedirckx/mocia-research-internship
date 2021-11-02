@@ -47,6 +47,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     kfold = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     au_rocs = np.zeros(n_splits)
     au_prcs = np.zeros(n_splits)
+    best_params = []
     for cross_run, (train_idx, test_idx) in enumerate(kfold.split(ptids, trajectory_labels)):
         train_trajectories = ptids[train_idx]
         train_trajectory_labels = trajectory_labels[train_idx]
@@ -83,13 +84,16 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         au_rocs[cross_run] = evaluation_results[3]
         au_prcs[cross_run] = evaluation_results[2]
 
-        # Show hyperparameters of 10 best trials
-        print(f'Showing best hyperparameters for run: {cross_run+1}/{n_splits}')
-        tuner.results_summary(num_trials=10)
+        # Store hyperparameters of best trial
+        best_params.append(tuner.get_best_hyperparameters(1)[0].values)
     
     print('\nCross validation finished, results on test data:')
     print(f'AUROC: {np.mean(au_rocs):.3f} - std={np.std(au_rocs):.3f}')
     print(f'AUPRC: {np.mean(au_prcs):.3f} - std={np.std(au_prcs):.3f}\n')
+
+    # Print best hyperparameters
+    for i, param_set in enumerate(best_params):
+        print(f'Best hyperparameters for partition: {i+1} - {param_set}\n')
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
     windows=study_df.loc[study_df['PTID'].isin(trajectories)]
