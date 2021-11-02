@@ -2,6 +2,9 @@
 tadpole_challenge
 output
 
+# Cluster logs
+*.out
+
 # Python stuff
 .ipynb_checkpoints
 *.pyc
