@@ -66,7 +66,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
             oracle=tuner_oracle,
             hypermodel=search_model,
             prediction_horizon=matchnet_config.pred_horizon,
-            directory='output/random_search',
+            directory='/ceph/csedu-scratch/project/ddirckx/random_search', # TODO --> read from config
             project_name=search_config.output_folder)
 
         # Execute cross-validated random hyperparameter search
@@ -88,8 +88,8 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         tuner.results_summary(num_trials=10)
     
     print('\nCross validation finished, results on test data:')
-    print(f'AUROC: {np.mean(au_rocs)} - std={np.std(au_rocs)}')
-    print(f'AUPRC: {np.mean(au_prcs)} - std={np.std(au_prcs)}\n')
+    print(f'AUROC: {np.mean(au_rocs):.3f} - std={np.std(au_rocs):.3f}')
+    print(f'AUPRC: {np.mean(au_prcs):.3f} - std={np.std(au_prcs):.3f}\n')
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
     windows=study_df.loc[study_df['PTID'].isin(trajectories)]
