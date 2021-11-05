@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
-from typing import Tuple
+from typing import List, Tuple
 
 from sklearn.preprocessing import OneHotEncoder
 
@@ -14,8 +14,8 @@ class DataCreator():
         self.window_length = window_length
         self.prediction_horizon = prediction_horizon
 
-    def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame) -> Tuple[np.array, np.array, np.array, np.array]:
-        measurement_labels, true_labels, feature_window_set, mask_window_set = [], [], [], []
+    def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame, forwarded_indexes: List) -> Tuple[np.array, np.array, np.array, np.array]:
+        measurement_labels, true_labels, metric_labels, feature_window_set, mask_window_set = [], [], [], [], []
 
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
@@ -27,13 +27,20 @@ class DataCreator():
             # Fetch labels for desired predictions horizons
             pred_horizons = traj_labels[0:max_divisble].reshape(-1, self.prediction_horizon)
 
+            # Store indexes to use for metric computation (ignore imputed and forwarded labels)
+            forwarded_intersect = set(trajectory.index.tolist()).intersection(set(forwarded_indexes))
+            traj_forward_indexes = [idx not in forwarded_intersect and trajectory.loc[idx]['DX'] >= 0 for idx in trajectory.index]
+
             # Fill right-censored labels with NaN if necessary
             if mod > 0:
                 remainder = np.append(traj_labels[-mod:], np.full(self.prediction_horizon - mod, np.nan))
                 remainder = np.expand_dims(remainder, axis=0)
                 pred_horizons = np.concatenate((pred_horizons, remainder))
+                traj_forward_indexes.extend([False for _ in range(self.prediction_horizon - mod)])
 
-            # Impute nan values. Store index of imputed labels for later loss calculation
+            metric_labels.append(np.reshape(traj_forward_indexes, (-1, self.prediction_horizon)))
+
+            # Impute nan labels and store indexes to use for loss computation (ignore imputed labels)
             true_labels.append(~np.isnan(pred_horizons))
             pred_horizons = np.nan_to_num(pred_horizons)
 
@@ -63,10 +70,11 @@ class DataCreator():
 
         one_hot_labels = np.concatenate(one_hot_labels, axis=1).reshape(len(measurement_labels), self.prediction_horizon, 2)
         true_labels = np.array(list(itertools.chain.from_iterable(true_labels)))
+        metric_labels = np.array(list(itertools.chain.from_iterable(metric_labels)))
         feature_window_set = np.array(list(itertools.chain.from_iterable(feature_window_set)))
         mask_window_set = np.array(list(itertools.chain.from_iterable(mask_window_set)))
 
-        return one_hot_labels, true_labels, feature_window_set, mask_window_set
+        return one_hot_labels, true_labels, metric_labels, feature_window_set, mask_window_set
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
         # Get feature columns (ignore ptid, dx and month)

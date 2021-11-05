@@ -3,7 +3,7 @@ import pandas as pd
 
 from pathlib import Path
 from tqdm import tqdm
-from typing import Tuple
+from typing import List, Tuple
 
 
 class DataPreprocessor():
@@ -12,7 +12,7 @@ class DataPreprocessor():
         self.input_path: Path = input_path
         self.label_forwarding = label_forwarding
 
-    def preprocess_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def preprocess_data(self) -> Tuple[pd.DataFrame, pd.DataFrame, List]:
         study_df = self.load_data(self.input_path)
         study_df = study_df.sort_values(by=['Month'])
 
@@ -52,13 +52,12 @@ class DataPreprocessor():
         # Concat study dataframe
         study_df = pd.concat([meta_data, feature_set, months], axis=1)
 
-        # If label forwarding is not applied, remove timesteps after first stable diagnosis of AD
-        if not self.label_forwarding:
-            study_df = self.remove_timesteps(study_df)
+        # Process positive labels after first stable diagnosis
+        study_df, forwarded_indexes = self.process_positive_labels(study_df)
 
         print('Finished initial pre-processing of the data')
 
-        return study_df, missing_masks
+        return study_df, missing_masks, forwarded_indexes
 
     def load_data(self, input_path: Path) -> pd.DataFrame:
         print('Loading the data...')
@@ -160,25 +159,33 @@ class DataPreprocessor():
 
         return feature_set
 
-    def remove_timesteps(self, study_df: pd.DataFrame) -> pd.DataFrame:
+    def process_positive_labels(self, study_df: pd.DataFrame) -> pd.DataFrame:
         counter = 0
+        all_forwarded_indexes = []
 
-        # Iterate over all patients with a stable AD diagnosis and remove redundant measurements
-        for pt_id in study_df[study_df['DX'] == 'Dementia']['PTID'].unique():
+        for pt_id in study_df.loc[study_df['DX'] == 'Dementia']['PTID'].unique():
 
             # Get events for this patient
             events = study_df.loc[study_df['PTID'] == pt_id]
 
-            # Get index of first stable diagnosis of AD
-            ad_index = events.index[events['DX'] == 'Dementia'][0]
+            # Get month of first stable diagnosis of AD
+            ad_month = events.loc[events['DX'] == 'Dementia'].iloc[0]['Month']
 
             # Get indexes of measurements after first stable diagnosis
-            forwarding_indexes = events.index[events.index > ad_index]
+            forwarding_indexes = events.index[events['Month'] > ad_month]
+            all_forwarded_indexes.extend(forwarding_indexes.tolist())
 
-            # Remove all measurements after first stable diagnosis
             if len(forwarding_indexes) > 0:
-                study_df = study_df.drop(index=forwarding_indexes)
+
                 counter += len(forwarding_indexes)
 
-        print(f'Removed {counter} redundant timesteps')
-        return study_df
+                # If specified, employ label forwarding
+                if self.label_forwarding:
+                    study_df.loc[forwarding_indexes, 'DX'] = study_df.loc[forwarding_indexes, 'DX'].fillna('Dementia')
+                    continue
+                
+                # In case no label forwarding should be applied, remove timesteps after first stable diagnosis
+                study_df = study_df.drop(index=forwarding_indexes)
+
+        print(f'Processed {counter} positive timesteps')
+        return study_df, all_forwarded_indexes

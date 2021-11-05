@@ -33,13 +33,14 @@ class MatchNet(Model):
     def train_step(self, data):
         # Unpack the data
         measurements, labels, sample_weights = data
+        train_weights = sample_weights[0]
 
         with tf.GradientTape() as tape:
             # Execute forward pass
             predictions = self(measurements, training=True)
 
             # Compute loss
-            loss = self.compute_loss(labels, predictions, sample_weights)
+            loss = self.compute_loss(labels, predictions, train_weights)
 
         # Compute gradients and update weights
         trainable_vars = self.trainable_variables
@@ -55,6 +56,8 @@ class MatchNet(Model):
 
     def test_step(self, data):
         measurements, labels, sample_weights = data
+        val_weights = sample_weights[0]
+        metric_weights = sample_weights[1]
         loss_total, au_roc_total, au_prc_total, convergence_total = 0, 0, 0, 0
 
         # Compute test loss, auroc & auprc for a specified number of steps and
@@ -63,9 +66,9 @@ class MatchNet(Model):
             predictions = self(measurements, training=True)
 
             # Compute loss and metrics
-            loss_total += self.compute_loss(labels,predictions, sample_weights)
+            loss_total += self.compute_loss(labels,predictions, val_weights)
             au_roc, au_prc, convergence = self.compute_metrics(
-                labels, predictions, sample_weights, self.config.convergence_weights)
+                labels, predictions, metric_weights, self.config.convergence_weights)
             au_roc_total += au_roc
             au_prc_total += au_prc
             convergence_total += convergence

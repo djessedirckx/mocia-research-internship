@@ -18,7 +18,7 @@ class MatchNetTuner(kt.Tuner):
 
         self.prediction_horizon: int = prediction_horizon
 
-    def run_trial(self, trial, trajectories, trajectory_labels, study_df, missing_masks):
+    def run_trial(self, trial, trajectories, trajectory_labels, study_df, missing_masks, forwarded_indexes):
         hp = trial.hyperparameters
 
         # Define hyperparameter search ranges for batch size and early stopping patience
@@ -37,21 +37,24 @@ class MatchNetTuner(kt.Tuner):
         data_creator = DataCreator(window_length, self.prediction_horizon)
 
         # Prepare the data
-        train_measurement_labels, train_true_labels, train_windows, train_masks = self.prepare_data(data_creator,
-            study_df, missing_masks, train_trajectories)
-        val_measurement_labels, val_true_labels, val_windows, val_masks = self.prepare_data(data_creator,
-            study_df, missing_masks, val_trajectories)
+        train_measurement_labels, train_true_labels, train_metric_labels, train_windows, train_masks = self.prepare_data(data_creator,
+            study_df, missing_masks, train_trajectories, forwarded_indexes)
+        val_measurement_labels, val_true_labels, val_metric_labels, val_windows, val_masks = self.prepare_data(data_creator,
+            study_df, missing_masks, val_trajectories, forwarded_indexes)
         train_data = [train_windows, train_masks]
         train_labels = train_measurement_labels
         validation_data = [val_windows, val_masks]
         validation_labels = val_measurement_labels
 
+        tst = [train_true_labels, train_metric_labels]
+        print(tst[0])
+
         # TODO --> load epochs from config
-        model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=50, sample_weight=train_true_labels, validation_data=(
-            validation_data, validation_labels, val_true_labels), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
+        model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=50, sample_weight=[train_true_labels, train_metric_labels], validation_data=(
+            validation_data, validation_labels, [val_true_labels, val_metric_labels]), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
 
         # Evaluate model on validation data
-        evaluation_results = model.evaluate(validation_data, validation_labels, sample_weight=val_true_labels, batch_size=len(val_true_labels))
+        evaluation_results = model.evaluate(validation_data, validation_labels, sample_weight=[val_true_labels, val_metric_labels], batch_size=len(val_true_labels))
         loss = evaluation_results[0]
         au_roc = evaluation_results[3]
         au_prc = evaluation_results[2]
@@ -61,7 +64,7 @@ class MatchNetTuner(kt.Tuner):
         self.oracle.update_trial(trial.trial_id, {'val_loss': loss, 'val_au_roc': au_roc, 'val_au_prc': au_prc, 'val_convergence_metric': convergence_metric})
         self.save_model(trial.trial_id, model)
 
-    def prepare_data(self, data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
+    def prepare_data(self, data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List, forwarded_indexes: List):
         windows = study_df.loc[study_df['PTID'].isin(trajectories)]
         masks = missing_masks.loc[missing_masks['PTID'].isin(trajectories)]
-        return data_creator.create_data(windows, masks)
+        return data_creator.create_data(windows, masks, forwarded_indexes)

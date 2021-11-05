@@ -22,8 +22,8 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
 
     # Load data and perform initial pre-processing
     input_file = 'tadpole_challenge/TADPOLE_D1_D2.csv'
-    data_preprocessor = DataPreprocessor(input_file, label_forwarding=False)
-    study_df, missing_masks = data_preprocessor.preprocess_data()
+    data_preprocessor = DataPreprocessor(input_file, label_forwarding=matchnet_config.label_forwarding)
+    study_df, missing_masks, forwarded_indexes = data_preprocessor.preprocess_data()
 
     # Current datetime to be able to properly distinguish between search outputs
     now = datetime.now().isoformat()
@@ -71,7 +71,12 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
             project_name=search_config.output_folder)
 
         # Execute cross-validated random hyperparameter search
-        tuner.search(trajectories=train_trajectories, trajectory_labels=train_trajectory_labels, study_df=study_df, missing_masks=missing_masks)
+        tuner.search(
+            trajectories=train_trajectories, 
+            trajectory_labels=train_trajectory_labels, 
+            study_df=study_df, 
+            missing_masks=missing_masks, 
+            forwarded_indexes=forwarded_indexes)
 
         # Prepare the test data
         best_model = tuner.get_best_models()[0]
@@ -106,12 +111,15 @@ if __name__ == '__main__':
     parser.add_argument('--prediction_horizon', type=int, help='Number of events in the future to predict')
     parser.add_argument('--cross_val_splits', type=int, help='Number of cross validation splits to use', default=5)
     parser.add_argument('--max_trials', type=int, help='Max number of trials to perform randomsearch')
+    parser.add_argument('--label_forwarding', action='store_true', help='Employ label forwarding to passively increase amount of positive labels')
     args = parser.parse_args()
 
     matchnet_config= MatchNetConfig(
         cov_input_features=35,
         mask_input_features=35,
         pred_horizon = args.prediction_horizon,
-        output_path='output/test_set')
+        output_path='output/test_set',
+        label_fowarding=args.label_forwarding
+        )
 
     random_search(matchnet_config, n_splits=args.cross_val_splits, max_trials=args.max_trials)
