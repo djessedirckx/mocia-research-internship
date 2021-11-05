@@ -82,10 +82,10 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         best_model = tuner.get_best_models()[0]
         window_length = best_model.layers[0].input_shape[0][1]
         data_creator = DataCreator(window_length, matchnet_config.pred_horizon)
-        test_measurement_labels, test_true_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories)
+        test_measurement_labels, test_true_labels, test_metric_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
 
         # Evaluate best model on test data
-        evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=test_true_labels, batch_size=len(test_true_labels))
+        evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels], batch_size=len(test_true_labels))
         au_rocs[cross_run] = evaluation_results[3]
         au_prcs[cross_run] = evaluation_results[2]
 
@@ -100,10 +100,10 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     for i, param_set in enumerate(best_params):
         print(f'Best hyperparameters for partition: {i+1} - {param_set}\n')
 
-def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List):
+def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List, forwarded_indexes: List):
     windows=study_df.loc[study_df['PTID'].isin(trajectories)]
     masks=missing_masks.loc[missing_masks['PTID'].isin(trajectories)]
-    return data_creator.create_data(windows, masks)
+    return data_creator.create_data(windows, masks, forwarded_indexes)
 
 if __name__ == '__main__':
 
