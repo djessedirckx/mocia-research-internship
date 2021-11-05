@@ -46,9 +46,6 @@ class MatchNetTuner(kt.Tuner):
         validation_data = [val_windows, val_masks]
         validation_labels = val_measurement_labels
 
-        tst = [train_true_labels, train_metric_labels]
-        print(tst[0])
-
         # TODO --> load epochs from config
         model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=50, sample_weight=[train_true_labels, train_metric_labels], validation_data=(
             validation_data, validation_labels, [val_true_labels, val_metric_labels]), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])

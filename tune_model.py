@@ -112,6 +112,7 @@ if __name__ == '__main__':
     parser.add_argument('--cross_val_splits', type=int, help='Number of cross validation splits to use', default=5)
     parser.add_argument('--max_trials', type=int, help='Max number of trials to perform randomsearch')
     parser.add_argument('--label_forwarding', action='store_true', help='Employ label forwarding to passively increase amount of positive labels')
+    parser.add_argument('--weight_regularisation', action='store_true', help='Use weight regularisation in model')
     args = parser.parse_args()
 
     matchnet_config= MatchNetConfig(
@@ -119,7 +120,8 @@ if __name__ == '__main__':
         mask_input_features=35,
         pred_horizon = args.prediction_horizon,
         output_path='output/test_set',
-        label_fowarding=args.label_forwarding
+        label_fowarding=args.label_forwarding,
+        weight_regularisation=args.weight_regularisation
         )
 
     random_search(matchnet_config, n_splits=args.cross_val_splits, max_trials=args.max_trials)

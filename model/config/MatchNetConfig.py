@@ -21,7 +21,8 @@ class MatchNetConfig():
                  val_frequency: int = None,
                  mc_repeats: int = 10,
                  output_path: str = None,
-                 label_fowarding: bool = False):
+                 label_fowarding: bool = False,
+                 weight_regularisation: bool = False):
 
         # Model configuration
         self.cov_filters: int = cov_filters
@@ -50,3 +51,4 @@ class MatchNetConfig():
         self.mc_repeats: int = mc_repeats
         self.output_path: str = output_path
         self.label_forwarding: bool = label_fowarding
+        self.weight_regularisation: bool = weight_regularisation
