@@ -1,11 +1,13 @@
+from collections import Counter
 from typing import List
 
 import kerastuner as kt
 import numpy as np
 import pandas as pd
 
-from tensorflow.keras.callbacks import EarlyStopping
+from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import train_test_split
+from tensorflow.keras.callbacks import EarlyStopping
 
 from eda_preprocessing.DataCreator import DataCreator
 
@@ -18,7 +20,7 @@ class MatchNetTuner(kt.Tuner):
 
         self.prediction_horizon: int = prediction_horizon
 
-    def run_trial(self, trial, trajectories, trajectory_labels, study_df, missing_masks, forwarded_indexes):
+    def run_trial(self, trial, trajectories, trajectory_labels, study_df, missing_masks, forwarded_indexes, oversampling=False):
         hp = trial.hyperparameters
 
         # Define hyperparameter search ranges for batch size and early stopping patience
@@ -26,7 +28,16 @@ class MatchNetTuner(kt.Tuner):
         stopping_patience = hp.Choice('stopping_patience', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
         # Split data into training and validation
-        train_trajectories, val_trajectories, _, _ = train_test_split(trajectories, trajectory_labels, test_size=0.25, stratify=trajectory_labels, random_state=42)
+        train_trajectories, val_trajectories, train_trajectory_labels, _ = train_test_split(trajectories, trajectory_labels, test_size=0.25, stratify=trajectory_labels, random_state=42)
+
+        if oversampling:
+            oversample_ratio = hp.Choice('oversample_ratio', [1.0, 0.5, 0.33])
+            oversampler = RandomOverSampler(sampling_strategy=oversample_ratio, random_state=42)
+
+            # Oversample the training data using the chosen oversample ratio
+            train_trajectories = np.reshape(train_trajectories, (-1, 1))
+            train_trajectories, train_trajectory_labels = oversampler.fit_resample(train_trajectories, train_trajectory_labels)
+            train_trajectories = train_trajectories.ravel()
 
         # Initialise model and earlystopping callback
         model = self.hypermodel.build(trial.hyperparameters)

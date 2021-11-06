@@ -22,7 +22,8 @@ class MatchNetConfig():
                  mc_repeats: int = 10,
                  output_path: str = None,
                  label_fowarding: bool = False,
-                 weight_regularisation: bool = False):
+                 weight_regularisation: bool = False,
+                 oversampling: bool = False):
 
         # Model configuration
         self.cov_filters: int = cov_filters
@@ -52,3 +53,4 @@ class MatchNetConfig():
         self.output_path: str = output_path
         self.label_forwarding: bool = label_fowarding
         self.weight_regularisation: bool = weight_regularisation
+        self.oversampling: bool = oversampling

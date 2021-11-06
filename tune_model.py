@@ -76,7 +76,8 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
             trajectory_labels=train_trajectory_labels, 
             study_df=study_df, 
             missing_masks=missing_masks, 
-            forwarded_indexes=forwarded_indexes)
+            forwarded_indexes=forwarded_indexes,
+            oversampling=matchnet_config.oversampling)
 
         # Prepare the test data
         best_model = tuner.get_best_models()[0]
@@ -113,6 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_trials', type=int, help='Max number of trials to perform randomsearch')
     parser.add_argument('--label_forwarding', action='store_true', help='Employ label forwarding to passively increase amount of positive labels')
     parser.add_argument('--weight_regularisation', action='store_true', help='Use weight regularisation in model')
+    parser.add_argument('--oversampling', action='store_true', help='Apply oversampling of the minority class in the training data')
     args = parser.parse_args()
 
     matchnet_config= MatchNetConfig(
@@ -121,7 +123,7 @@ if __name__ == '__main__':
         pred_horizon = args.prediction_horizon,
         output_path='output/test_set',
         label_fowarding=args.label_forwarding,
-        weight_regularisation=args.weight_regularisation
-        )
+        weight_regularisation=args.weight_regularisation,
+        oversampling=args.oversampling)
 
     random_search(matchnet_config, n_splits=args.cross_val_splits, max_trials=args.max_trials)
