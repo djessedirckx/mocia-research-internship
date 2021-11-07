@@ -83,7 +83,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         best_model = tuner.get_best_models()[0]
         window_length = best_model.layers[0].input_shape[0][1]
         data_creator = DataCreator(window_length, matchnet_config.pred_horizon)
-        test_measurement_labels, test_true_labels, test_metric_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
+        test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
 
         # Evaluate best model on test data
         evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels], batch_size=len(test_true_labels))

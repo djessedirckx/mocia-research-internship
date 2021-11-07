@@ -28,16 +28,7 @@ class MatchNetTuner(kt.Tuner):
         stopping_patience = hp.Choice('stopping_patience', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
         # Split data into training and validation
-        train_trajectories, val_trajectories, train_trajectory_labels, _ = train_test_split(trajectories, trajectory_labels, test_size=0.25, stratify=trajectory_labels, random_state=42)
-
-        if oversampling:
-            oversample_ratio = hp.Choice('oversample_ratio', [1.0, 0.5, 0.33])
-            oversampler = RandomOverSampler(sampling_strategy=oversample_ratio, random_state=42)
-
-            # Oversample the training data using the chosen oversample ratio
-            train_trajectories = np.reshape(train_trajectories, (-1, 1))
-            train_trajectories, train_trajectory_labels = oversampler.fit_resample(train_trajectories, train_trajectory_labels)
-            train_trajectories = train_trajectories.ravel()
+        train_trajectories, val_trajectories, _, _ = train_test_split(trajectories, trajectory_labels, test_size=0.25, stratify=trajectory_labels, random_state=42)
 
         # Initialise model and earlystopping callback
         model = self.hypermodel.build(trial.hyperparameters)
@@ -48,10 +39,27 @@ class MatchNetTuner(kt.Tuner):
         data_creator = DataCreator(window_length, self.prediction_horizon)
 
         # Prepare the data
-        train_measurement_labels, train_true_labels, train_metric_labels, train_windows, train_masks = self.prepare_data(data_creator,
+        train_measurement_labels, train_true_labels, train_horizon_labels, train_metric_labels, train_windows, train_masks = self.prepare_data(data_creator,
             study_df, missing_masks, train_trajectories, forwarded_indexes)
-        val_measurement_labels, val_true_labels, val_metric_labels, val_windows, val_masks = self.prepare_data(data_creator,
+        val_measurement_labels, val_true_labels, _, val_metric_labels, val_windows, val_masks = self.prepare_data(data_creator,
             study_df, missing_masks, val_trajectories, forwarded_indexes)
+
+        if oversampling:
+            oversample_ratio = hp.Choice('oversample_ratio', [1.0, 0.5, 0.33, 0.2, 0.1])
+            oversampler = RandomOverSampler(sampling_strategy=oversample_ratio, random_state=42)
+
+            # Oversample the training data using the chosen oversample ratio
+            train_idx = np.arange(len(train_horizon_labels)).reshape(-1, 1)
+            train_idx, train_horizon_labels = oversampler.fit_resample(train_idx, train_horizon_labels)
+            train_idx = train_idx.ravel()
+
+            # Use idx to oversample training data
+            train_measurement_labels = train_measurement_labels[train_idx]
+            train_true_labels = train_true_labels[train_idx]
+            train_metric_labels = train_metric_labels[train_idx]
+            train_windows = train_windows[train_idx]
+            train_masks = train_masks[train_idx]
+
         train_data = [train_windows, train_masks]
         train_labels = train_measurement_labels
         validation_data = [val_windows, val_masks]

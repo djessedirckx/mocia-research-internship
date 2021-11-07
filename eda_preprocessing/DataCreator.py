@@ -14,8 +14,8 @@ class DataCreator():
         self.window_length = window_length
         self.prediction_horizon = prediction_horizon
 
-    def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame, forwarded_indexes: List) -> Tuple[np.array, np.array, np.array, np.array]:
-        measurement_labels, true_labels, metric_labels, feature_window_set, mask_window_set = [], [], [], [], []
+    def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame, forwarded_indexes: List) -> Tuple[np.array, np.array, np.array, List, np.array, np.array]:
+        measurement_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set = [], [], [], [], [], []
 
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
@@ -39,6 +39,7 @@ class DataCreator():
                 traj_forward_indexes.extend([False for _ in range(self.prediction_horizon - mod)])
 
             metric_labels.append(np.reshape(traj_forward_indexes, (-1, self.prediction_horizon)))
+            horizon_labels.extend([1 if 1 in horizon else 0 for horizon in pred_horizons])
 
             # Impute nan labels and store indexes to use for loss computation (ignore imputed labels)
             true_labels.append(~np.isnan(pred_horizons))
@@ -74,7 +75,7 @@ class DataCreator():
         feature_window_set = np.array(list(itertools.chain.from_iterable(feature_window_set)))
         mask_window_set = np.array(list(itertools.chain.from_iterable(mask_window_set)))
 
-        return one_hot_labels, true_labels, metric_labels, feature_window_set, mask_window_set
+        return one_hot_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
         # Get feature columns (ignore ptid, dx and month)
