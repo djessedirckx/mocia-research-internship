@@ -39,7 +39,15 @@ class DataCreator():
                 traj_forward_indexes.extend([False for _ in range(self.prediction_horizon - mod)])
 
             metric_labels.append(np.reshape(traj_forward_indexes, (-1, self.prediction_horizon)))
-            horizon_labels.extend([1 if 1 in horizon else 0 for horizon in pred_horizons])
+            first_one = False
+            for horizon in pred_horizons:
+                if 1 in horizon and not first_one:
+                    horizon_labels.append(1)
+                    first_one = True
+                elif 1 in horizon:
+                    horizon_labels.append(-1)
+                else:
+                    horizon_labels.append(0)
 
             # Impute nan labels and store indexes to use for loss computation (ignore imputed labels)
             true_labels.append(~np.isnan(pred_horizons))
