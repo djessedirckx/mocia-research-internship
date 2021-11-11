@@ -45,13 +45,20 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     ptids = np.array(ptids)
 
     kfold = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-    au_rocs = np.zeros(n_splits)
-    au_prcs = np.zeros(n_splits)
+    test_au_rocs = np.zeros(n_splits)
+    test_au_prcs = np.zeros(n_splits)
+    val_au_roc_stds = np.zeros(n_splits)
+    val_au_prc_stds = np.zeros(n_splits)
+    val_au_roc_means = np.zeros(n_splits)
+    val_au_prc_means = np.zeros(n_splits)
     best_params = []
     for cross_run, (train_idx, test_idx) in enumerate(kfold.split(ptids, trajectory_labels)):
         train_trajectories = ptids[train_idx]
         train_trajectory_labels = trajectory_labels[train_idx]
         test_trajectories = ptids[test_idx]
+
+        val_au_rocs = np.zeros(max_trials)
+        val_au_prcs = np.zeros(max_trials)
 
         # Configure search
         tuner_oracle = RandomSearch(
@@ -79,6 +86,16 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
             forwarded_indexes=forwarded_indexes,
             oversampling=matchnet_config.oversampling)
 
+        # Collect validation scores and compute standard deviations and means
+        for i, trial in enumerate(tuner.oracle.trials.values()):
+            val_au_rocs[i] = trial.metrics.metrics['val_au_roc']._observations[0].value[0]
+            val_au_prcs[i] = trial.metrics.metrics['val_au_prc']._observations[0].value[0]
+
+        val_au_roc_stds[cross_run] = np.std(val_au_rocs)
+        val_au_prc_stds[cross_run] = np.std(val_au_prcs)
+        val_au_roc_means[cross_run] = np.mean(val_au_rocs)
+        val_au_prc_means[cross_run] = np.mean(val_au_prcs)
+
         # Prepare the test data
         best_model = tuner.get_best_models()[0]
         window_length = best_model.layers[0].input_shape[0][1]
@@ -87,15 +104,18 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
 
         # Evaluate best model on test data
         evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels], batch_size=len(test_true_labels))
-        au_rocs[cross_run] = evaluation_results[3]
-        au_prcs[cross_run] = evaluation_results[2]
+        test_au_rocs[cross_run] = evaluation_results[3]
+        test_au_prcs[cross_run] = evaluation_results[2]
 
         # Store hyperparameters of best trial
         best_params.append(tuner.get_best_hyperparameters(1)[0].values)
     
     print('\nCross validation finished, results on test data:')
-    print(f'AUROC: {np.mean(au_rocs):.3f} - std={np.std(au_rocs):.3f}')
-    print(f'AUPRC: {np.mean(au_prcs):.3f} - std={np.std(au_prcs):.3f}\n')
+    print(f'AUROC: {np.mean(test_au_rocs):.3f} - std={np.std(test_au_rocs):.3f}')
+    print(f'AUPRC: {np.mean(test_au_prcs):.3f} - std={np.std(test_au_prcs):.3f}\n')
+    print('Validation data metrics')
+    print(f'AUROC std on validation data: {val_au_roc_stds} - means: {val_au_roc_means}')
+    print(f'AUPRC std on validation data: {val_au_prc_stds} - means: {val_au_prc_means}')
 
     # Print best hyperparameters
     for i, param_set in enumerate(best_params):
