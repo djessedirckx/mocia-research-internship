@@ -47,10 +47,8 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     kfold = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     test_au_rocs = np.zeros(n_splits)
     test_au_prcs = np.zeros(n_splits)
-    val_au_roc_stds = np.zeros(n_splits)
-    val_au_prc_stds = np.zeros(n_splits)
-    val_au_roc_means = np.zeros(n_splits)
-    val_au_prc_means = np.zeros(n_splits)
+    all_val_au_roc = np.zeros((n_splits, max_trials))
+    all_val_au_prc = np.zeros((n_splits, max_trials))
     best_params = []
     for cross_run, (train_idx, test_idx) in enumerate(kfold.split(ptids, trajectory_labels)):
         train_trajectories = ptids[train_idx]
@@ -91,10 +89,8 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
             val_au_rocs[i] = trial.metrics.metrics['val_au_roc']._observations[0].value[0]
             val_au_prcs[i] = trial.metrics.metrics['val_au_prc']._observations[0].value[0]
 
-        val_au_roc_stds[cross_run] = np.std(val_au_rocs)
-        val_au_prc_stds[cross_run] = np.std(val_au_prcs)
-        val_au_roc_means[cross_run] = np.mean(val_au_rocs)
-        val_au_prc_means[cross_run] = np.mean(val_au_prcs)
+        all_val_au_roc[cross_run] = val_au_rocs
+        all_val_au_prc[cross_run] = val_au_prcs
 
         # Prepare the test data
         best_model = tuner.get_best_models()[0]
@@ -113,9 +109,13 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     print('\nCross validation finished, results on test data:')
     print(f'AUROC: {np.mean(test_au_rocs):.3f} - std={np.std(test_au_rocs):.3f}')
     print(f'AUPRC: {np.mean(test_au_prcs):.3f} - std={np.std(test_au_prcs):.3f}\n')
-    print('Validation data metrics')
-    print(f'AUROC std on validation data: {val_au_roc_stds} - means: {val_au_roc_means}')
-    print(f'AUPRC std on validation data: {val_au_prc_stds} - means: {val_au_prc_means}')
+    print('----- Validation data metrics -----')
+
+    for auroc, auprc in zip(all_val_au_roc, all_val_au_prc):
+        print(f'AUROC: Std: {np.std(auroc)} - Mean: {np.mean(auroc)} -- AUPRC: Std: {np.std(auprc)} - Mean: {np.mean(auprc)}')
+
+    print(f'Complete AUROC val stats: Std: {np.std(all_val_au_roc.ravel())} - Mean: {np.mean(all_val_au_roc.ravel())}')
+    print(f'Complete AUPRC val stats: Std: {np.std(all_val_au_prc.ravel())} - Mean: {np.mean(all_val_au_prc.ravel())}')
 
     # Print best hyperparameters
     for i, param_set in enumerate(best_params):
