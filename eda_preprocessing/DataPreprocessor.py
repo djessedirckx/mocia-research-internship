@@ -116,28 +116,29 @@ class DataPreprocessor():
 
         # Use zero-order interpolation on the data (execute per patient)
         for _, events in tqdm(study_df.groupby('PTID')):
-            feature_set.loc[events.index, feature_set.columns] = events[feature_set.columns].fillna(0)
+            feature_set.loc[events.index, feature_set.columns] = events[feature_set.columns].fillna(
+                method='ffill')
 
-        # # Fill remaining numerical column nan values with mean of all measurements
-        # for column in feature_set.columns[np.r_[0, 2:3, 7:22]]:
-        #     feature_set[column].fillna(feature_set[column].mean(), inplace=True)
+        # Fill remaining numerical column nan values with mean of all measurements
+        for column in feature_set.columns[np.r_[0, 2:3, 7:22]]:
+            feature_set[column].fillna(feature_set[column].mean(), inplace=True)
 
-        # # Apply data imputation on APOE4 column. Values are replaced based on their probability of occurence
-        # apoe4_stats = feature_set['APOE4'].value_counts()
-        # apoe4_stats = apoe4_stats / len(feature_set)
+        # Apply data imputation on APOE4 column. Values are replaced based on their probability of occurence
+        apoe4_stats = feature_set['APOE4'].value_counts()
+        apoe4_stats = apoe4_stats / len(feature_set)
 
-        # rng = np.random.default_rng(seed=42)
-        # nan_apoe_rows = feature_set.index[feature_set['APOE4'].isna()]
+        rng = np.random.default_rng(seed=42)
+        nan_apoe_rows = feature_set.index[feature_set['APOE4'].isna()]
 
-        # for nan_apoe in nan_apoe_rows:
-        #     rnd = rng.random()
+        for nan_apoe in nan_apoe_rows:
+            rnd = rng.random()
 
-        #     if rnd < apoe4_stats[0]:
-        #         feature_set.loc[nan_apoe, 'APOE4'] = 0
-        #     elif rnd >= apoe4_stats[0] and rnd <= apoe4_stats[1]:
-        #         feature_set.loc[nan_apoe, 'APOE4'] = 1
-        #     else:
-        #         feature_set.loc[nan_apoe, 'APOE4'] = 2
+            if rnd < apoe4_stats[0]:
+                feature_set.loc[nan_apoe, 'APOE4'] = 0
+            elif rnd >= apoe4_stats[0] and rnd <= apoe4_stats[1]:
+                feature_set.loc[nan_apoe, 'APOE4'] = 1
+            else:
+                feature_set.loc[nan_apoe, 'APOE4'] = 2
 
         return feature_set
 

@@ -32,7 +32,7 @@ class MatchNetHyperModel(kt.HyperModel):
 
             # Define hyperparameter selection ranges
             covariate_filters = hp.Choice('covariate_filters', self.search_config.covariate_filters)
-            mask_filters = hp.Choice('mask_filters', self.search_config.mask_filters)
+            # mask_filters = hp.Choice('mask_filters', self.search_config.mask_filters)
             conv_width = hp.Choice('conv_width', self.search_config.conv_filter_width)
 
             # Create kernel_regulariser is desired
@@ -49,11 +49,11 @@ class MatchNetHyperModel(kt.HyperModel):
             x_covariate = Conv1D(filters=covariate_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_covariate)
             x_covariate = MCDropout(rate=dropout_rate)(x_covariate)    
 
-            x_mask = Conv1D(filters=mask_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_mask)
+            x_mask = Conv1D(filters=covariate_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_mask)
             x_mask = MCDropout(rate=dropout_rate)(x_mask)
 
             # Concatenate output from mask branch to main branch
-            x_covariate = Concatenate()([x_covariate, x_mask])
+            x_covariate = Concatenate(axis=1)([x_covariate, x_mask])
 
         # Dense layers
         x_covariate = Flatten()(x_covariate)
