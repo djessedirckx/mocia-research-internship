@@ -24,10 +24,10 @@ class MatchNetHyperModel(kt.HyperModel):
         window_length = hp.Choice('window_length', self.search_config.window_length)
 
         covariate_input = Input(shape=(window_length, self.matchnet_config.cov_input_shape[1]))
-        mask_input = Input(shape=(window_length, self.matchnet_config.mask_input_shape[1]))
+        # mask_input = Input(shape=(window_length, self.matchnet_config.mask_input_shape[1]))
 
         # Create the specified number of convolutional (parallel) streams
-        x_covariate, x_mask = covariate_input, mask_input
+        x_covariate = covariate_input
         for _ in range(hp.Choice('conv_layers', self.search_config.conv_layers)):
 
             # Define hyperparameter selection ranges
@@ -49,11 +49,11 @@ class MatchNetHyperModel(kt.HyperModel):
             x_covariate = Conv1D(filters=covariate_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_covariate)
             x_covariate = MCDropout(rate=dropout_rate)(x_covariate)    
 
-            x_mask = Conv1D(filters=covariate_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_mask)
-            x_mask = MCDropout(rate=dropout_rate)(x_mask)
+            # x_mask = Conv1D(filters=covariate_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_mask)
+            # x_mask = MCDropout(rate=dropout_rate)(x_mask)
 
             # Concatenate output from mask branch to main branch
-            x_covariate = Concatenate(axis=1)([x_covariate, x_mask])
+            # x_covariate = Concatenate(axis=1)([x_covariate, x_mask])
 
         # Dense layers
         x_covariate = Flatten()(x_covariate)
@@ -73,7 +73,7 @@ class MatchNetHyperModel(kt.HyperModel):
             output_layers.append(output)
 
         # Construct and return model
-        model = MatchNet(inputs=[covariate_input, mask_input], outputs=output_layers, config=self.matchnet_config)
+        model = MatchNet(inputs=[covariate_input], outputs=output_layers, config=self.matchnet_config)
         optimizer = Adam(learning_rate=hp.Choice('lr_rate', self.search_config.lr))
         model.compile(optimizer)
         return model

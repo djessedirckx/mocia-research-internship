@@ -69,9 +69,9 @@ class MatchNetTuner(kt.Tuner):
             train_windows = train_windows[train_idx]
             train_masks = train_masks[train_idx]
 
-        train_data = [train_windows, train_masks]
+        train_data = train_windows
         train_labels = train_measurement_labels
-        validation_data = [val_windows, val_masks]
+        validation_data = val_windows
         validation_labels = val_measurement_labels
 
         # TODO --> load epochs from config
