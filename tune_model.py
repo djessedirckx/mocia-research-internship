@@ -99,7 +99,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
 
         # Evaluate best model on test data
-        evaluation_results = best_model.evaluate(test_windows, test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels], batch_size=len(test_true_labels))
+        evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels], batch_size=len(test_true_labels))
         test_au_rocs[cross_run] = evaluation_results[3]
         test_au_prcs[cross_run] = evaluation_results[2]
 
