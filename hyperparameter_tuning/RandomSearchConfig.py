@@ -16,7 +16,7 @@ class RandomSearchConfig():
         self.oversample_ratio = [None, 1, 2, 3, 5, 10]
         self.connected_width = [32, 64, 128, 256, 512]
         self.conv_filter_width = [3, 4, 5, 6, 7, 8, 9, 10]
-        self.window_length = [3, 4, 5, 6, 7, 8, 9, 10]
+        self.window_length = [3, 4, 5, 6]
 
         # Add current datetime in isoformat to distinguish between runs
         self.output_folder = f'pred_horizon_{pred_horizon}--{date}--run-{cross_run}'
