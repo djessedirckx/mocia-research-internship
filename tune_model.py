@@ -72,7 +72,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
             oracle=tuner_oracle,
             hypermodel=search_model,
             prediction_horizon=matchnet_config.pred_horizon,
-            directory='output/random_search', # TODO --> read from config
+            directory='/ceph/csedu-scratch/project/ddirckx/random_search', # TODO --> read from config
             project_name=search_config.output_folder)
 
         # Execute cross-validated random hyperparameter search
