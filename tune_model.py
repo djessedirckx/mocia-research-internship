@@ -146,4 +146,4 @@ if __name__ == '__main__':
         weight_regularisation=args.weight_regularisation,
         oversampling=args.oversampling)
 
-    random_search(matchnet_config, n_splits=args.cross_val_splits, max_trials=1)
+    random_search(matchnet_config, n_splits=args.cross_val_splits, max_trials=args.max_trials)
