@@ -1,11 +1,9 @@
-from collections import Counter
 from typing import List
 
 import kerastuner as kt
 import numpy as np
 import pandas as pd
 
-from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.callbacks import EarlyStopping
 
@@ -45,19 +43,16 @@ class MatchNetTuner(kt.Tuner):
             study_df, missing_masks, val_trajectories, forwarded_indexes)
 
         if oversampling:
-            oversample_ratio = hp.Choice('oversample_ratio', [1.0, 0.5, 0.33, 0.2, 0.1])
-            oversampler = RandomOverSampler(sampling_strategy=oversample_ratio, random_state=42)
+            oversample_ratio = hp.Choice('oversample_ratio', [1, 2, 3, 5, 10])
             
             # Create a filter for which samples to use for oversampling
             train_true_horizon_labels = list(map(lambda x: True if x == 1 or x == 0 else False, train_horizon_labels))
             train_true_horizon_labels = np.array(train_true_horizon_labels)
-            train_idx = np.where(train_true_horizon_labels)[0].reshape(-1, 1)
+            train_idx = np.where(train_true_horizon_labels)[0]
             forwarded_idx = np.where(train_true_horizon_labels == False)[0]
 
-            # Oversample the training data using the chosen oversample ratio
-            train_idx = np.where(train_true_horizon_labels)[0].reshape(-1, 1)
-            train_idx, _ = oversampler.fit_resample(train_idx, np.array(train_horizon_labels)[train_idx])
-            train_idx = train_idx.ravel()
+            # Oversample the positive training labels
+            train_idx = np.repeat(train_idx, oversample_ratio)
 
             # Readd forwarded indexes (no need for shuffling, as this is already done by the model fit by default)
             train_idx = np.concatenate([train_idx, forwarded_idx])
