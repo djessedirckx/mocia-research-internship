@@ -7,7 +7,7 @@ import keras_tuner as kt
 import numpy as np
 import pandas as pd
 
-from keras_tuner.oracles import RandomSearch
+from keras_tuner.oracles import BayesianOptimization
 from sklearn.model_selection import StratifiedKFold
 
 from hyperparameter_tuning.MatchNetHyperModel import MatchNetHyperModel
@@ -28,7 +28,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     # Current datetime to be able to properly distinguish between search outputs
     now = datetime.now().isoformat()
 
-    print(f'\nExecuting randomsearch for prediction_horizon={matchnet_config.pred_horizon}\n')
+    print(f'\nExecuting randomsearch for prediction_horizon={matchnet_config.pred_horizon}. Label-forwarding={matchnet_config.label_forwarding}, Oversampling={matchnet_config.oversampling}, Regularisation={matchnet_config.weight_regularisation}\n')
 
     # Make label binary, mark all Dementia instances as positive
     study_df['DX'] = study_df['DX'].replace('Dementia', 1)
@@ -59,7 +59,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         val_au_prcs = np.zeros(max_trials)
 
         # Configure search
-        tuner_oracle = RandomSearch(
+        tuner_oracle = BayesianOptimization(
             objective=kt.Objective('val_convergence_metric', direction='max'),
             max_trials=max_trials,
             seed=42
@@ -72,7 +72,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
             oracle=tuner_oracle,
             hypermodel=search_model,
             prediction_horizon=matchnet_config.pred_horizon,
-            directory='/ceph/csedu-scratch/project/ddirckx/random_search', # TODO --> read from config
+            directory=matchnet_config.output_path,
             project_name=search_config.output_folder)
 
         # Execute cross-validated random hyperparameter search

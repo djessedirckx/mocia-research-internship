@@ -27,7 +27,7 @@ class DataCreator():
             # Fetch labels for desired predictions horizons
             pred_horizons = traj_labels[0:max_divisble].reshape(-1, self.prediction_horizon)
 
-            # Store indexes to use for metric computation (ignore imputed and forwarded labels)
+            # Store indexes to use for metric computation (ignore imputed (nan) and forwarded labels)
             forwarded_intersect = set(trajectory.index.tolist()).intersection(set(forwarded_indexes))
             traj_forward_indexes = [idx not in forwarded_intersect and trajectory.loc[idx]['DX'] >= 0 for idx in trajectory.index]
 
