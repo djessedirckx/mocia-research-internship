@@ -35,7 +35,7 @@ def build_model(config: MatchNetConfig) -> MatchNet:
     # Define output layers based on specified prediction horizon
     output_layers = []
     for i in range(config.pred_horizon):
-        output = Dense(units=2, activation='softmax', kernel_regularizer=l1_l2(config.l1, config.l2))(x_covariate)
+        output = Dense(units=2, activation='softmax')(x_covariate)
         output_layers.append(output)
 
     # Construct and return model
