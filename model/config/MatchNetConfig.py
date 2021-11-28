@@ -19,7 +19,7 @@ class MatchNetConfig():
                  l1: float = None,
                  l2: float = None,
                  val_frequency: int = None,
-                 mc_repeats: int = 100,
+                 mc_repeats: int = 5,
                  output_path: str = None,
                  label_fowarding: bool = False,
                  weight_regularisation: bool = False,

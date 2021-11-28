@@ -35,21 +35,22 @@ class MatchNetHyperModel(kt.HyperModel):
             mask_filters = hp.Choice('mask_filters', self.search_config.mask_filters)
             conv_width = hp.Choice('conv_width', self.search_config.conv_filter_width)
 
+            
             # Create kernel_regulariser is desired
             if self.matchnet_config.weight_regularisation:
                 l1 = hp.Choice('l1', self.search_config.l1)
                 l2 = hp.Choice('l2', self.search_config.l2)
+                kernel_regulariser = l1_l2(l1, l2)
             else:
-                l1 = 0
-                l2 = 0
+                kernel_regulariser = None
 
             dropout_rate = hp.Choice('dropout_rate', self.search_config.dropout_rate)
 
             # Define layers
-            x_covariate = Conv1D(filters=covariate_filters, kernel_size=conv_width, kernel_regularizer=l1_l2(l1=l1, l2=l2), activation='relu', padding='causal')(x_covariate)
+            x_covariate = Conv1D(filters=covariate_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_covariate)
             x_covariate = MCDropout(rate=dropout_rate)(x_covariate)    
 
-            x_mask = Conv1D(filters=mask_filters, kernel_size=conv_width, kernel_regularizer=l1_l2(l1=l1, l2=l2), activation='relu', padding='causal')(x_mask)
+            x_mask = Conv1D(filters=mask_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_mask)
             x_mask = MCDropout(rate=dropout_rate)(x_mask)
 
             # Concatenate output from mask branch to main branch
@@ -63,7 +64,7 @@ class MatchNetHyperModel(kt.HyperModel):
             # Define hyperparameter selection range
             dense_units = hp.Choice('dense_units', self.search_config.connected_width)
         
-            x_covariate = Dense(units=dense_units, activation='relu', kernel_regularizer=l1_l2(l1=l1, l2=l2))(x_covariate)
+            x_covariate = Dense(units=dense_units, activation='relu', kernel_regularizer=kernel_regulariser)(x_covariate)
             x_covariate = MCDropout(dropout_rate)(x_covariate)
 
         # Define output layers based on specified prediction horizon
