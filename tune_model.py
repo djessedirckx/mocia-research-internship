@@ -7,7 +7,7 @@ import keras_tuner as kt
 import numpy as np
 import pandas as pd
 
-from keras_tuner.oracles import RandomSearch
+from keras_tuner.oracles import BayesianOptimizationOracle
 from sklearn.model_selection import StratifiedKFold
 
 from hyperparameter_tuning.MatchNetHyperModel import MatchNetHyperModel
@@ -59,7 +59,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         val_au_prcs = np.zeros(max_trials)
 
         # Configure search
-        tuner_oracle = RandomSearch(
+        tuner_oracle = BayesianOptimizationOracle(
             objective=kt.Objective('val_convergence_metric', direction='max'),
             max_trials=max_trials,
             seed=42
