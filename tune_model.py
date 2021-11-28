@@ -6,6 +6,7 @@ from typing import List
 import keras_tuner as kt
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 
 from keras_tuner.oracles import BayesianOptimizationOracle
 from sklearn.model_selection import StratifiedKFold
@@ -16,6 +17,12 @@ from hyperparameter_tuning.RandomSearchConfig import RandomSearchConfig
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
 from model.config.MatchNetConfig import MatchNetConfig
+
+physical_devices = tf.config.list_physical_devices('GPU')
+try:
+  tf.config.experimental.set_memory_growth(physical_devices[0], True)
+except:
+    print('Invalid device or cannot modify virtual devices once initialized.')
 
 
 def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials: int = 100):
