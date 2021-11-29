@@ -38,9 +38,9 @@ class MatchNetTuner(kt.Tuner):
         data_creator = DataCreator(window_length, self.prediction_horizon)
 
         # Prepare the data
-        train_measurement_labels, train_true_labels, train_horizon_labels, train_metric_labels, train_windows, train_masks = self.prepare_data(data_creator,
+        train_measurement_labels, train_true_labels, train_horizon_labels, train_metric_labels, train_windows, train_masks, _ = self.prepare_data(data_creator,
             study_df, missing_masks, train_trajectories, forwarded_indexes)
-        val_measurement_labels, val_true_labels, _, val_metric_labels, val_windows, val_masks = self.prepare_data(data_creator,
+        val_measurement_labels, val_true_labels, _, val_metric_labels, val_windows, val_masks, _ = self.prepare_data(data_creator,
             study_df, missing_masks, val_trajectories, forwarded_indexes)
 
         if oversampling:

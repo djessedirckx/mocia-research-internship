@@ -15,7 +15,7 @@ class DataCreator():
         self.prediction_horizon = prediction_horizon
 
     def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame, forwarded_indexes: List) -> Tuple[np.array, np.array, np.array, List, np.array, np.array]:
-        measurement_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set = [], [], [], [], [], []
+        measurement_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set, patient_set = [], [], [], [], [], [], []
 
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
@@ -66,6 +66,9 @@ class DataCreator():
                 traj_windows.append(traj_features[i:i+self.window_length, :])
                 mask_windows.append(masks_features[i:i+self.window_length, :])
 
+                # Store patient id for corresponding trajectory (used for reconstruction later)
+                patient_set.append(name)
+
             measurement_labels.extend(pred_horizons)
             feature_window_set.append(traj_windows)
             mask_window_set.append(mask_windows)
@@ -82,8 +85,9 @@ class DataCreator():
         metric_labels = np.array(list(itertools.chain.from_iterable(metric_labels)))
         feature_window_set = np.array(list(itertools.chain.from_iterable(feature_window_set)))
         mask_window_set = np.array(list(itertools.chain.from_iterable(mask_window_set)))
+        patient_set = np.array(patient_set)
 
-        return one_hot_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set
+        return one_hot_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set, patient_set
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
         # Get feature columns (ignore ptid, dx and month)

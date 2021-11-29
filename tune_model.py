@@ -11,11 +11,12 @@ import tensorflow as tf
 from keras_tuner.oracles import BayesianOptimizationOracle
 from sklearn.model_selection import StratifiedKFold
 
+from analysis.test_metrics import compute_c_index_score
+from eda_preprocessing.DataPreprocessor import DataPreprocessor
+from eda_preprocessing.DataCreator import DataCreator
 from hyperparameter_tuning.MatchNetHyperModel import MatchNetHyperModel
 from hyperparameter_tuning.MatchNetTuner import MatchNetTuner
 from hyperparameter_tuning.RandomSearchConfig import RandomSearchConfig
-from eda_preprocessing.DataPreprocessor import DataPreprocessor
-from eda_preprocessing.DataCreator import DataCreator
 from model.config.MatchNetConfig import MatchNetConfig
 
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -54,6 +55,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     kfold = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     test_au_rocs = np.zeros(n_splits)
     test_au_prcs = np.zeros(n_splits)
+    test_c_idx = np.zeros(n_splits)
     all_val_au_roc = np.zeros((n_splits, max_trials))
     all_val_au_prc = np.zeros((n_splits, max_trials))
     best_params = []
@@ -103,10 +105,13 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         best_model = tuner.get_best_models()[0]
         window_length = best_model.layers[0].input_shape[0][1]
         data_creator = DataCreator(window_length, matchnet_config.pred_horizon)
-        test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
+        test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks, test_patients = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
 
         # Evaluate best model on test data
         evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels], batch_size=len(test_true_labels))
+        evaluation_predictions = best_model.predict_on_batch([test_windows, test_masks])
+        test_c_idx[cross_run] = compute_c_index_score(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon)
+
         test_au_rocs[cross_run] = evaluation_results[3]
         test_au_prcs[cross_run] = evaluation_results[2]
 
@@ -115,7 +120,8 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     
     print('\nCross validation finished, results on test data:')
     print(f'AUROC: {np.mean(test_au_rocs):.3f} - std={np.std(test_au_rocs):.3f}')
-    print(f'AUPRC: {np.mean(test_au_prcs):.3f} - std={np.std(test_au_prcs):.3f}\n')
+    print(f'AUPRC: {np.mean(test_au_prcs):.3f} - std={np.std(test_au_prcs):.3f}')
+    print(f'Mean concordance index score: {np.mean(test_c_idx):.3f}\n')
     print('----- Validation data metrics -----')
 
     for auroc, auprc in zip(all_val_au_roc, all_val_au_prc):
