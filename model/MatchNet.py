@@ -34,13 +34,14 @@ class MatchNet(Model):
         # Unpack the data
         measurements, labels, sample_weights = data
         train_weights = sample_weights[0]
+        train_lengths = sample_weights[2]
 
         with tf.GradientTape() as tape:
             # Execute forward pass
             predictions = self(measurements, training=True)
 
             # Compute loss
-            loss = self.compute_loss(labels, predictions, train_weights)
+            loss = self.compute_loss(labels, predictions, train_weights, train_lengths)
 
         # Compute gradients and update weights
         trainable_vars = self.trainable_variables
@@ -58,6 +59,7 @@ class MatchNet(Model):
         measurements, labels, sample_weights = data
         val_weights = sample_weights[0]
         metric_weights = sample_weights[1]
+        val_lengths = sample_weights[2]
         loss_total, au_roc_total, au_prc_total, convergence_total = 0, 0, 0, 0
 
         # Compute test loss, auroc & auprc for a specified number of steps and
@@ -66,7 +68,7 @@ class MatchNet(Model):
             predictions = self(measurements, training=True)
 
             # Compute loss and metrics
-            loss_total += self.compute_loss(labels,predictions, val_weights)
+            loss_total += self.compute_loss(labels,predictions, val_weights, val_lengths)
             au_roc, au_prc, convergence = self.compute_metrics(
                 labels, predictions, metric_weights, self.config.convergence_weights)
             au_roc_total += au_roc
@@ -86,7 +88,7 @@ class MatchNet(Model):
             "convergence_metric": self.convergence_tracker.result()
         }
 
-    def compute_loss(self, labels, predictions, sample_weights):
+    def compute_loss(self, labels, predictions, sample_weights, length_weights):
         loss = []
 
         # Iterate over each timepoint in the prediction horizon
@@ -102,6 +104,7 @@ class MatchNet(Model):
             # Compute loss, ignore imputed (or forwarded-filled) labels
             prediction = prediction[weights]
             label = label[weights]
+            length_weight = length_weights[weights]
             loss.append(self.loss_fn(label, prediction))
 
         loss = tf.concat(loss, 0)

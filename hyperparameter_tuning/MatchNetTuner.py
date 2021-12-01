@@ -19,7 +19,7 @@ class MatchNetTuner(kt.Tuner):
 
         self.prediction_horizon: int = prediction_horizon
 
-    def run_trial(self, trial, trajectories, trajectory_labels, study_df, missing_masks, forwarded_indexes, oversampling=False):
+    def run_trial(self, trial, trajectories, trajectory_labels, study_df, missing_masks, forwarded_indexes, median_traj_length, oversampling=False):
         hp = trial.hyperparameters
 
         # Define hyperparameter search ranges for batch size and early stopping patience
@@ -38,10 +38,14 @@ class MatchNetTuner(kt.Tuner):
         data_creator = DataCreator(window_length, self.prediction_horizon)
 
         # Prepare the data
-        train_measurement_labels, train_true_labels, train_horizon_labels, train_metric_labels, train_windows, train_masks, _ = self.prepare_data(data_creator,
+        train_measurement_labels, train_true_labels, train_horizon_labels, train_metric_labels, train_windows, train_masks, train_lengths, _ = self.prepare_data(data_creator,
             study_df, missing_masks, train_trajectories, forwarded_indexes)
-        val_measurement_labels, val_true_labels, _, val_metric_labels, val_windows, val_masks, _ = self.prepare_data(data_creator,
+        val_measurement_labels, val_true_labels, _, val_metric_labels, val_windows, val_masks, val_lengths, _ = self.prepare_data(data_creator,
             study_df, missing_masks, val_trajectories, forwarded_indexes)
+
+        # Make original lenghts proportional to the median trajectory length to use them as weights in the loss computation
+        train_lengths = median_traj_length / train_lengths
+        val_lengths = median_traj_length / val_lengths        
 
         if oversampling:
             oversample_ratio = hp.Choice('oversample_ratio', [1.0, 0.5, 0.33, 0.2, 0.1])
@@ -67,6 +71,7 @@ class MatchNetTuner(kt.Tuner):
             train_metric_labels = train_metric_labels[train_idx]
             train_windows = train_windows[train_idx]
             train_masks = train_masks[train_idx]
+            train_lengths = train_lengths[train_idx]
 
         train_data = [train_windows, train_masks]
         train_labels = train_measurement_labels
@@ -74,11 +79,11 @@ class MatchNetTuner(kt.Tuner):
         validation_labels = val_measurement_labels
 
         # TODO --> load epochs from config
-        model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=50, sample_weight=[train_true_labels, train_metric_labels], validation_data=(
-            validation_data, validation_labels, [val_true_labels, val_metric_labels]), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
+        model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=50, sample_weight=[train_true_labels, train_metric_labels, train_lengths], validation_data=(
+            validation_data, validation_labels, [val_true_labels, val_metric_labels, val_lengths]), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
 
         # Evaluate model on validation data
-        evaluation_results = model.evaluate(validation_data, validation_labels, sample_weight=[val_true_labels, val_metric_labels], batch_size=len(val_true_labels))
+        evaluation_results = model.evaluate(validation_data, validation_labels, sample_weight=[val_true_labels, val_metric_labels, val_lengths], batch_size=len(val_true_labels))
         loss = evaluation_results[0]
         au_roc = evaluation_results[3]
         au_prc = evaluation_results[2]

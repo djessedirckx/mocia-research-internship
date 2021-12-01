@@ -43,12 +43,16 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     study_df['DX'] = study_df['DX'].replace(
         ['MCI', 'NL', 'MCI to Dementia', 'NL to MCI', 'MCI to NL', 'Dementia to MCI', 'NL to Dementia'], 0)
 
-    trajectory_labels, ptids = [], []
+    trajectory_labels, ptids, traj_lengths = [], [], []
     for ptid, trajectory in study_df.groupby("PTID"):
+        labels = trajectory['DX'].values
         trajectory_labels.append(
-            1) if 1 in trajectory['DX'].values else trajectory_labels.append(0)
+            1) if 1 in labels else trajectory_labels.append(0)
+
+        traj_lengths.append(np.where(labels == 1)[0][0] + 1 if 1 in labels else np.where(labels == 0)[0][-1] + 1)
         ptids.append(ptid)
 
+    median_traj_length = np.median(traj_lengths)
     trajectory_labels = np.array(trajectory_labels)
     ptids = np.array(ptids)
 
@@ -91,6 +95,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
             study_df=study_df, 
             missing_masks=missing_masks, 
             forwarded_indexes=forwarded_indexes,
+            median_traj_length=median_traj_length,
             oversampling=matchnet_config.oversampling)
 
         # Collect validation scores and compute standard deviations and means
@@ -105,10 +110,11 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         best_model = tuner.get_best_models()[0]
         window_length = best_model.layers[0].input_shape[0][1]
         data_creator = DataCreator(window_length, matchnet_config.pred_horizon)
-        test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks, test_patients = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
+        test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks, test_lengths, test_patients = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
 
         # Evaluate best model on test data
-        evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels], batch_size=len(test_true_labels))
+        test_lengths = median_traj_length / test_lengths
+        evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels, test_lengths], batch_size=len(test_true_labels))
         evaluation_predictions = best_model.predict_on_batch([test_windows, test_masks])
         test_c_idx[cross_run] = compute_c_index_score(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon)
 

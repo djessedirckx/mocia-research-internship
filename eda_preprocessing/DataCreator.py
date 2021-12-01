@@ -16,6 +16,7 @@ class DataCreator():
 
     def create_data(self, study_data: pd.DataFrame, missing_masks: pd.DataFrame, forwarded_indexes: List) -> Tuple[np.array, np.array, np.array, List, np.array, np.array]:
         measurement_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set, patient_set = [], [], [], [], [], [], []
+        length_set = []
 
         # Iterate over all patients in data
         for name, trajectory in tqdm(study_data.groupby("PTID")):
@@ -60,6 +61,9 @@ class DataCreator():
             masks = missing_masks.loc[missing_masks['PTID'] == name]
             masks_features = self.extrapolate_values(masks)
 
+            # Compute duration untill first stable diagnosis or right_censoring (use for proportionality in loss computation)
+            loss_length = np.where(traj_labels == 1)[0][0] + 1 if 1 in traj_labels else np.where(traj_labels == 0)[0][-1] + 1
+
             # Construct feature windows based on the desired prediction horizon
             traj_windows, mask_windows = [], []
             for i in range(0, traj_length, self.prediction_horizon):
@@ -68,6 +72,9 @@ class DataCreator():
 
                 # Store patient id for corresponding trajectory (used for reconstruction later)
                 patient_set.append(name)
+
+                # Store length of complete trajectory untill censoring/diagnosis for loss computation
+                length_set.append(loss_length)
 
             measurement_labels.extend(pred_horizons)
             feature_window_set.append(traj_windows)
@@ -86,8 +93,9 @@ class DataCreator():
         feature_window_set = np.array(list(itertools.chain.from_iterable(feature_window_set)))
         mask_window_set = np.array(list(itertools.chain.from_iterable(mask_window_set)))
         patient_set = np.array(patient_set)
+        length_set = np.array(length_set)
 
-        return one_hot_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set, patient_set
+        return one_hot_labels, true_labels, horizon_labels, metric_labels, feature_window_set, mask_window_set, length_set, patient_set
 
     def extrapolate_values(self, trajectory: pd.DataFrame) -> np.array:
         # Get feature columns (ignore ptid, dx and month)
