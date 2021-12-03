@@ -105,7 +105,7 @@ class MatchNet(Model):
             prediction = prediction[weights]
             label = label[weights]
             length_weight = length_weights[weights]
-            loss.append(self.loss_fn(label, prediction))
+            loss.append(self.loss_fn(label, prediction) * length_weight)
 
         loss = tf.concat(loss, 0)
         return tf.reduce_mean(loss)
