@@ -1,6 +1,7 @@
 from itertools import product
 from typing import List
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -9,6 +10,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import Adam
 
+from analysis.test_metrics import compute_c_index_score, compute_calibration_curve
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
 from model.config.MatchNetConfig import MatchNetConfig
@@ -25,12 +27,15 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     study_df['DX'] = study_df['DX'].replace(
         ['MCI', 'NL', 'MCI to Dementia', 'NL to MCI', 'MCI to NL', 'Dementia to MCI', 'NL to Dementia'], 0)
 
-    trajectory_labels, ptids = [], []
+    trajectory_labels, ptids, traj_lengths = [], [], []
     for ptid, trajectory in study_df.groupby("PTID"):
+        labels = trajectory['DX'].values
         trajectory_labels.append(
-            1) if 1 in trajectory['DX'].values else trajectory_labels.append(0)
+            1) if 1 in labels else trajectory_labels.append(0)
+        traj_lengths.append(np.where(labels == 1)[0][0] + 1 if 1 in labels else np.where(labels == 0)[0][-1] + 1)
         ptids.append(ptid)
 
+    median_traj_length = np.median(traj_lengths)
     trajectory_labels = np.array(trajectory_labels)
     ptids = np.array(ptids)
     
@@ -42,9 +47,12 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     test_auroc = np.zeros(len(combs))
     test_auprc = np.zeros(len(combs))
     test_conv = np.zeros(len(combs))
-
+    test_c_idx = np.zeros(len(combs))
     test_auroc_std = np.zeros(len(combs))
     test_auprc_std = np.zeros(len(combs))
+
+    test_true_curves = []
+    test_pred_curves = []
     
     for i, l1_l2 in enumerate(combs):        
         # Pass configuration to model config
@@ -61,6 +69,9 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
         fold_au_rocs = np.zeros(n_splits)
         fold_au_prcs = np.zeros(n_splits)
         fold_conv = np.zeros(n_splits)
+        fold_c_index = np.zeros(n_splits)
+        true_curves = []
+        pred_curves = []
         for cross_run, (train_idx, test_idx) in enumerate(kfold.split(ptids, trajectory_labels)):
             train_trajectories = ptids[train_idx]
             train_trajectory_labels = trajectory_labels[train_idx]
@@ -69,11 +80,11 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
             train_trajectories, val_trajectories, _, _ = train_test_split(train_trajectories, train_trajectory_labels, test_size=0.25, stratify=train_trajectory_labels, random_state=42)
             
             # Prepare the data
-            train_measurement_labels, train_true_labels, train_horizon_labels, train_metric_labels, train_windows, train_masks = prepare_data(data_creator,
+            train_measurement_labels, train_true_labels, train_horizon_labels, train_metric_labels, train_windows, train_masks, train_lengths, train_patients = prepare_data(data_creator,
                 study_df, missing_masks, train_trajectories, forwarded_indexes)
-            val_measurement_labels, val_true_labels, _, val_metric_labels, val_windows, val_masks = prepare_data(data_creator,
+            val_measurement_labels, val_true_labels, _, val_metric_labels, val_windows, val_masks, val_lengths, val_patients = prepare_data(data_creator,
                 study_df, missing_masks, val_trajectories, forwarded_indexes)
-            test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks = prepare_data(data_creator,
+            test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks, test_lengths, test_patients = prepare_data(data_creator,
                 study_df, missing_masks, test_trajectories, forwarded_indexes)
 
             if matchnet_config.oversampling:
@@ -99,35 +110,77 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
                 train_metric_labels = train_metric_labels[train_idx]
                 train_windows = train_windows[train_idx]
                 train_masks = train_masks[train_idx]
+                train_lengths = train_lengths[train_idx]
 
             train_data = [train_windows, train_masks]
             train_labels = train_measurement_labels
             validation_data = [val_windows, val_masks]
             validation_labels = val_measurement_labels 
 
-            model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=max_epochs, sample_weight=[train_true_labels, train_metric_labels], validation_data=(
-                validation_data, validation_labels, [val_true_labels, val_metric_labels]), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
+            # Compute proportional weights for train, val and test data
+            train_lengths = median_traj_length / train_lengths
+            val_lengths = median_traj_length / val_lengths
+            test_lengths = median_traj_length / test_lengths
 
-            evaluation_results = model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels], batch_size=len(test_true_labels))
+            model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=max_epochs, sample_weight=[train_true_labels, train_metric_labels, train_lengths], validation_data=(
+                validation_data, validation_labels, [val_true_labels, val_metric_labels, val_lengths]), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
+
+            evaluation_results = model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels, test_lengths], batch_size=len(test_true_labels))
+            evaluation_predictions = model.predict_on_batch([test_windows, test_masks])
+            fold_c_index[cross_run] = compute_c_index_score(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon)
             fold_au_rocs[cross_run] = evaluation_results[3]
             fold_au_prcs[cross_run] = evaluation_results[2]
             fold_conv[cross_run] = evaluation_results[1]
+
+            # Compute calibration curves
+            true_survival, pred_survival = compute_calibration_curve(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon)
+            true_curves.append(true_survival)
+            pred_curves.append(pred_survival)
 
         test_auroc[i] = np.mean(fold_au_rocs)
         test_auprc[i] = np.mean(fold_au_prcs)
         test_auroc_std[i] = np.std(fold_au_rocs)
         test_auprc_std[i] = np.std(fold_au_prcs)
         test_conv[i] = np.mean(fold_conv)
+        test_c_idx[i] = np.mean(fold_c_index)
+
+        longest_curve = len(max(true_curves, key=len))
+        for true_curve, pred_curve in zip(true_curves, pred_curves):
+            if len(true_curve) < longest_curve:
+                for i in range(longest_curve - len(true_curve)):
+                    true_curve.append(true_curve[-1])
+                    pred_curve.append(pred_curve[-1])
+
+        true_curves = np.array(true_curves)
+        pred_curves = np.array(pred_curves)
+
+        test_true_curves.append(np.mean(true_curves, axis=0))
+        test_pred_curves.append(np.mean(pred_curves, axis=0))
 
     # Get best option
     best_index = np.argmax(test_conv)
     auroc = test_auroc[best_index]
     auprc = test_auprc[best_index]
     l1_l2_combination = combs[best_index]
+    best_true_curve = test_true_curves[best_index]
+    best_pred_curve = test_pred_curves[best_index]
+    c_index = test_c_idx[best_index]
 
-    print(f'Best auroc: {auroc}, auprc: {auprc}, combination: {l1_l2_combination}')
+    print(f'Best auroc: {auroc}, auprc: {auprc}, c-index: {c_index}, combination: {l1_l2_combination}')
     print(f'Test data auroc mean: {np.mean(test_auroc)}, std: {np.std(test_auroc)}')
     print(f'Test data auprc mean: {np.mean(test_auprc)}, std: {np.std(test_auprc)}')
+    print(f'Test data c-index score mean: {np.mean(test_c_idx)}, std: {np.std(test_c_idx)}')
+
+    # Save best calibration plot
+    plt.plot(best_pred_curve, best_true_curve, label='Calibration curve')
+    plt.plot([best_true_curve[-1],1],[best_true_curve[-1],1], '--', c='black', label='Perfect calibration')
+    plt.xlabel('Predicted probability')
+    plt.ylabel('Observed probability')
+    plt.legend()
+
+    filename = f'pred_h={matchnet_config.pred_horizon}, forwarding={matchnet_config.label_forwarding}, regularisation={matchnet_config.weight_regularisation}, oversampling={matchnet_config.oversampling}'
+    plt.savefig(f'{matchnet_config.output_path}/calibration{filename}.png')
+    plt.close()
 
 def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_masks: pd.DataFrame, trajectories: List, forwarded_indexes: List):
     windows = study_df.loc[study_df['PTID'].isin(trajectories)]
@@ -153,7 +206,8 @@ if __name__ == '__main__':
         weight_regularisation=True,
         oversampling=True,
         oversample_ratio=1,
-        learning_rate=0.001)
+        learning_rate=0.001,
+        output_path="output")
 
     train_model(matchnet_config)
 
