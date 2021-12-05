@@ -50,6 +50,7 @@ def retrain_best_model(pred_horizon: int, hyper_parameters: kt.HyperParameters, 
     train_lengths = median_traj_length / train_lengths
     val_lengths = median_traj_length / val_lengths
 
+    oversample_ratio = 0
     if oversample:
         oversample_ratio = hyper_parameters.values['oversample_ratio']
         train_measurement_labels, train_true_labels, train_metric_labels, train_windows, train_masks, train_lengths = oversample_train_data(
