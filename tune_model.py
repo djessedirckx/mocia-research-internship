@@ -10,15 +10,19 @@ import pandas as pd
 import tensorflow as tf
 
 from keras_tuner.oracles import BayesianOptimizationOracle
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, train_test_split
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.optimizers import Adam
 
 from analysis.test_metrics import compute_c_index_score, compute_calibration_curve
+from util.training.oversampler import oversample_train_data
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
 from hyperparameter_tuning.MatchNetHyperModel import MatchNetHyperModel
 from hyperparameter_tuning.MatchNetTuner import MatchNetTuner
 from hyperparameter_tuning.RandomSearchConfig import RandomSearchConfig
 from model.config.MatchNetConfig import MatchNetConfig
+from model.model_builder import build_model
 
 physical_devices = tf.config.list_physical_devices('GPU')
 try:
@@ -26,6 +30,70 @@ try:
 except:
     print('Invalid device or cannot modify virtual devices once initialized.')
 
+def retrain_best_model(pred_horizon: int, hyper_parameters: kt.HyperParameters, tuner: MatchNetTuner, data_creator: DataCreator, trajectories: List, oversample: bool, label_forwarding: bool, 
+                        weight_regularisation: bool, trajectory_labels: List, study_df: pd.DataFrame, missing_masks: pd.DataFrame, forwarded_indexes: List, median_traj_length: int):
+
+    # Split data in train/validation (similar to is done in hyperparameter search)
+    train_trajectories, val_trajectories, _, _ = train_test_split(trajectories, trajectory_labels, test_size=0.25, stratify=trajectory_labels, random_state=42)
+    
+    # Extract non-model hyperparameters
+    batch_size = hyper_parameters.values['batch_size']
+    stopping_patience = hyper_parameters.values['stopping_patience']
+
+    # Prepare the data
+    train_measurement_labels, train_true_labels, train_horizon_labels, train_metric_labels, train_windows, train_masks, train_lengths, _ = prepare_data(data_creator,
+        study_df, missing_masks, train_trajectories, forwarded_indexes)
+    val_measurement_labels, val_true_labels, _, val_metric_labels, val_windows, val_masks, val_lengths, _ = prepare_data(data_creator,
+        study_df, missing_masks, val_trajectories, forwarded_indexes)
+
+    # Make original lenghts proportional to the median trajectory length to use them as weights in the loss computation
+    train_lengths = median_traj_length / train_lengths
+    val_lengths = median_traj_length / val_lengths
+
+    if oversample:
+        oversample_ratio = hyper_parameters.values['oversample_ratio']
+        train_measurement_labels, train_true_labels, train_metric_labels, train_windows, train_masks, train_lengths = oversample_train_data(
+            oversample_ratio, train_horizon_labels, train_measurement_labels, train_true_labels, train_metric_labels, train_windows, train_masks, train_lengths)
+
+    train_data = [train_windows, train_masks]
+    train_labels = train_measurement_labels
+    validation_data = [val_windows, val_masks]
+    validation_labels = val_measurement_labels
+
+    model_config = MatchNetConfig(
+        pred_horizon,
+        hyper_parameters.values['window_length'],
+        hyper_parameters.values['covariate_filters'],
+        hyper_parameters.values['mask_filters'],
+        hyper_parameters.values['conv_width'],
+        hyper_parameters.values['conv_width'],
+        35,
+        35,
+        hyper_parameters.values['dense_units'],
+        hyper_parameters.values['conv_layers'],
+        hyper_parameters.values['dense_layers'],
+        hyper_parameters.values['lr_rate'],
+        hyper_parameters.values['dropout_rate'],
+        hyper_parameters.values['l1'],
+        hyper_parameters.values['l2'],
+        hyper_parameters.values['stopping_patience'],
+        5,
+        "output",
+        label_forwarding,
+        weight_regularisation,
+        oversample,
+        oversample_ratio
+    )
+
+    model = build_model(model_config)
+    optimizer = Adam(learning_rate=model_config.learning_rate)
+    model.compile(optimizer=optimizer)
+
+    early_stopping=EarlyStopping(monitor = 'val_convergence_metric', patience = stopping_patience, verbose = 1, mode = 'max')
+    model.fit(x=train_data, y=train_labels, batch_size=batch_size, epochs=50, sample_weight=[train_true_labels, train_metric_labels, train_lengths], validation_data=(
+            validation_data, validation_labels, [val_true_labels, val_metric_labels, val_lengths]), validation_batch_size=len(val_true_labels), callbacks=[early_stopping])
+    
+    return model
 
 def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials: int = 100):
 
@@ -110,9 +178,14 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         all_val_au_prc[cross_run] = val_au_prcs
 
         # Prepare the test data
-        best_model = tuner.get_best_models()[0]
-        window_length = best_model.layers[0].input_shape[0][1]
+        # best_model = tuner.get_best_models()[0]
+        best_param_set = tuner.get_best_hyperparameters()[0]
+        window_length = best_param_set.values['window_length']
         data_creator = DataCreator(window_length, matchnet_config.pred_horizon)
+
+        best_model = retrain_best_model(matchnet_config.pred_horizon, best_param_set, tuner, data_creator, train_trajectories, matchnet_config.oversampling, matchnet_config.label_forwarding, matchnet_config.weight_regularisation,
+                                        train_trajectory_labels, study_df, missing_masks, forwarded_indexes, median_traj_length)
+
         test_measurement_labels, test_true_labels, _, test_metric_labels, test_windows, test_masks, test_lengths, test_patients = prepare_data(data_creator, study_df, missing_masks, test_trajectories, forwarded_indexes)
 
         # Evaluate best model on test data
