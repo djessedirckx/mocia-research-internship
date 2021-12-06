@@ -51,10 +51,14 @@ def retrain_best_model(pred_horizon: int, hyper_parameters: kt.HyperParameters, 
     val_lengths = median_traj_length / val_lengths
 
     oversample_ratio = 0
+    l1, l2 = 0, 0
     if oversample:
         oversample_ratio = hyper_parameters.values['oversample_ratio']
         train_measurement_labels, train_true_labels, train_metric_labels, train_windows, train_masks, train_lengths = oversample_train_data(
             oversample_ratio, train_horizon_labels, train_measurement_labels, train_true_labels, train_metric_labels, train_windows, train_masks, train_lengths)
+    if weight_regularisation:
+        l1 = hyper_parameters.values['l1']
+        l2 = hyper_parameters.values['l2']
 
     train_data = [train_windows, train_masks]
     train_labels = train_measurement_labels
@@ -75,8 +79,8 @@ def retrain_best_model(pred_horizon: int, hyper_parameters: kt.HyperParameters, 
         hyper_parameters.values['dense_layers'],
         hyper_parameters.values['lr_rate'],
         hyper_parameters.values['dropout_rate'],
-        hyper_parameters.values['l1'],
-        hyper_parameters.values['l2'],
+        l1,
+        l2,
         hyper_parameters.values['stopping_patience'],
         5,
         "output",
