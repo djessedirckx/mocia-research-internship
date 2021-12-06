@@ -59,9 +59,6 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
         matchnet_config.l1 = l1_l2[0]
         matchnet_config.l2 = l1_l2[1]
 
-        model = build_model(matchnet_config)
-        optimizer = Adam(learning_rate=matchnet_config.learning_rate)
-        model.compile(optimizer=optimizer)
         early_stopping=EarlyStopping(monitor = 'val_convergence_metric', patience = matchnet_config.val_frequency, verbose = 1, mode = 'max')
         data_creator = DataCreator(matchnet_config.window_length, matchnet_config.pred_horizon)
 
@@ -73,6 +70,10 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
         true_curves = []
         pred_curves = []
         for cross_run, (train_idx, test_idx) in enumerate(kfold.split(ptids, trajectory_labels)):
+            model = build_model(matchnet_config)
+            optimizer = Adam(learning_rate=matchnet_config.learning_rate)
+            model.compile(optimizer=optimizer)
+
             train_trajectories = ptids[train_idx]
             train_trajectory_labels = trajectory_labels[train_idx]
             test_trajectories = ptids[test_idx]
@@ -189,25 +190,25 @@ def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_mask
 
 if __name__ == '__main__':
     matchnet_config = MatchNetConfig(
-        pred_horizon=1,
-        window_length=4,
-        cov_filters=32,
-        mask_filters=32,
-        cov_filter_size=4,
-        mask_filter_size=4,
+        pred_horizon=5,
+        window_length=3,
+        cov_filters=256,
+        mask_filters=128,
+        cov_filter_size=5,
+        mask_filter_size=5,
         cov_input_features=35,
         mask_input_features=35,
-        dense_units=128,
-        conv_blocks=3,
+        dense_units=512,
+        conv_blocks=1,
         dense_layers=3,
         dropout_rate=0.1,
-        val_frequency=5,
-        label_fowarding=True,
+        val_frequency=1,
+        label_fowarding=False,
         weight_regularisation=True,
-        oversampling=True,
+        oversampling=False,
         oversample_ratio=1,
-        learning_rate=0.001,
+        learning_rate=0.0001,
         output_path="output")
 
-    train_model(matchnet_config)
+    train_model(matchnet_config, batch_size=32)
 
