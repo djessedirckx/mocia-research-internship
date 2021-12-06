@@ -102,14 +102,14 @@ def compute_calibration_curve(events: np.array, predictions: np.array, ptids: Li
     true_survival_function = compute_survival_function(true_times, ~np.array(true_censoring))
     pred_survival_function = compute_survival_function(pred_times, ~np.array(pred_censoring))
 
+    # Impute missing timesteps by using the previous valid timestep
+    true_survival_function = impute_missing_survival_steps(true_survival_function)
+    pred_survival_function = impute_missing_survival_steps(pred_survival_function)
+
     # Make sure both survival function end at the same timestep
     if len(true_survival_function) > len(pred_survival_function):
         pred_survival_function = add_survival_timesteps(true_survival_function, pred_survival_function)
     elif len(pred_survival_function) > len(true_survival_function):
         true_survival_function = add_survival_timesteps(pred_survival_function, true_survival_function)
-
-    # Impute missing timesteps by using the previous valid timestep
-    true_survival_function = impute_missing_survival_steps(true_survival_function)
-    pred_survival_function = impute_missing_survival_steps(pred_survival_function)
 
     return true_survival_function['KM_estimate'].tolist() , pred_survival_function['KM_estimate'].tolist()
