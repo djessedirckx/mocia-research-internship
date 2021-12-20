@@ -136,8 +136,6 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
     test_c_idx = np.zeros(n_splits)
     all_val_au_roc = np.zeros((n_splits, max_trials))
     all_val_au_prc = np.zeros((n_splits, max_trials))
-    true_curves = []
-    pred_curves = []
     best_params = []
     for cross_run, (train_idx, test_idx) in enumerate(kfold.split(ptids, trajectory_labels)):
         train_trajectories = ptids[train_idx]
@@ -198,11 +196,6 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels, test_lengths], batch_size=len(test_true_labels))
         evaluation_predictions = best_model.predict_on_batch([test_windows, test_masks])
         test_c_idx[cross_run] = compute_c_index_score(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon)
-        
-        # Compute surivival functions for making a calibration analysis
-        true_survival_function, pred_survival_function = compute_calibration_curve(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon)
-        true_curves.append(true_survival_function)
-        pred_curves.append(pred_survival_function)
 
         test_au_rocs[cross_run] = evaluation_results[3]
         test_au_prcs[cross_run] = evaluation_results[2]
@@ -221,29 +214,6 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
 
     print(f'Complete AUROC val stats: Std: {np.std(all_val_au_roc.ravel())} - Mean: {np.mean(all_val_au_roc.ravel())}')
     print(f'Complete AUPRC val stats: Std: {np.std(all_val_au_prc.ravel())} - Mean: {np.mean(all_val_au_prc.ravel())}')
-
-    longest_curve = len(max(true_curves, key=len))
-    for true_curve, pred_curve in zip(true_curves, pred_curves):
-        if len(true_curve) < longest_curve:
-            for i in range(longest_curve - len(true_curve)):
-                true_curve.append(true_curve[-1])
-                pred_curve.append(pred_curve[-1])
-
-    true_curves = np.array(true_curves)
-    pred_curves = np.array(pred_curves)
-
-    true_mean = np.mean(true_curves, axis=0)
-    pred_mean = np.mean(pred_curves, axis=0)
-
-    plt.plot(pred_mean, true_mean, label='Calibration curve')
-    plt.plot([true_mean[-1],1],[true_mean[-1],1], '--', c='black', label='Perfect calibration')
-    plt.xlabel('Predicted probability')
-    plt.ylabel('Observed probability')
-    plt.legend()
-
-    filename = f'pred_h={matchnet_config.pred_horizon}, forwarding={matchnet_config.label_forwarding}, regularisation={matchnet_config.weight_regularisation}, oversampling={matchnet_config.oversampling}'
-    plt.savefig(f'{matchnet_config.output_path}/calibration{filename}.png')
-    plt.close()
 
     # Print best hyperparameters
     for i, param_set in enumerate(best_params):

@@ -16,7 +16,7 @@ from eda_preprocessing.DataCreator import DataCreator
 from model.config.MatchNetConfig import MatchNetConfig
 from model.model_builder import build_model
 
-def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: int = 50, batch_size: int = 128):
+def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: int = 50, batch_size: int = 128, eval_time=0):
     # Load data and perform initial pre-processing
     input_file = 'tadpole_challenge/TADPOLE_D1_D2.csv'
     data_preprocessor = DataPreprocessor(input_file, label_forwarding=matchnet_config.label_forwarding)
@@ -40,8 +40,8 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     ptids = np.array(ptids)
     
     # Get all possible l1, l2 combinations
-    l1 = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2]
-    l2 = [1e-4, 3e-4, 1e-3, 3e-3, 1e-2, 3e-2]
+    l1 = [0.03]
+    l2 = [0.0001]
     combs = list(product(l1, l2))
 
     test_auroc = np.zeros(len(combs))
@@ -134,7 +134,7 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
             fold_conv[cross_run] = evaluation_results[1]
 
             # Compute calibration curves
-            true_survival, pred_survival = compute_calibration_curve(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon)
+            true_survival, pred_survival = compute_calibration_curve(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon, eval_time=3)
             true_curves.append(true_survival)
             pred_curves.append(pred_survival)
 
@@ -144,13 +144,6 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
         test_auprc_std[i] = np.std(fold_au_prcs)
         test_conv[i] = np.mean(fold_conv)
         test_c_idx[i] = np.mean(fold_c_index)
-
-        longest_curve = len(max(true_curves, key=len))
-        for true_curve, pred_curve in zip(true_curves, pred_curves):
-            if len(true_curve) < longest_curve:
-                for i in range(longest_curve - len(true_curve)):
-                    true_curve.append(true_curve[-1])
-                    pred_curve.append(pred_curve[-1])
 
         true_curves = np.array(true_curves)
         pred_curves = np.array(pred_curves)
@@ -173,13 +166,14 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     print(f'Test data c-index score mean: {np.mean(test_c_idx)}, std: {np.std(test_c_idx)}')
 
     # Save best calibration plot
-    plt.plot(best_pred_curve, best_true_curve, label='Calibration curve')
-    plt.plot([best_true_curve[-1],1],[best_true_curve[-1],1], '--', c='black', label='Perfect calibration')
+    plt.plot(best_pred_curve, best_true_curve, marker='o', label='Calibration curve')
+    plt.plot([0, 1], [0, 1], linestyle='--', c='black', label='Perfect calibration')
     plt.xlabel('Predicted probability')
     plt.ylabel('Observed probability')
+    plt.title(f"Calibration curve at t={eval_time * 6 + 6} months")
     plt.legend()
 
-    filename = f'pred_h={matchnet_config.pred_horizon}, forwarding={matchnet_config.label_forwarding}, regularisation={matchnet_config.weight_regularisation}, oversampling={matchnet_config.oversampling}'
+    filename = f'pred_h={matchnet_config.pred_horizon}, forwarding={matchnet_config.label_forwarding}, regularisation={matchnet_config.weight_regularisation}, oversampling={matchnet_config.oversampling}, eval_time={eval_time}'
     plt.savefig(f'{matchnet_config.output_path}/calibration{filename}.png')
     plt.close()
 
@@ -190,22 +184,22 @@ def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_mask
 
 if __name__ == '__main__':
     matchnet_config = MatchNetConfig(
-        pred_horizon=5,
+        pred_horizon=1,
         window_length=3,
-        cov_filters=256,
-        mask_filters=128,
-        cov_filter_size=5,
-        mask_filter_size=5,
+        cov_filters=512,
+        mask_filters=8,
+        cov_filter_size=10,
+        mask_filter_size=10,
         cov_input_features=35,
         mask_input_features=35,
-        dense_units=512,
+        dense_units=128,
         conv_blocks=1,
-        dense_layers=3,
+        dense_layers=1,
         dropout_rate=0.1,
         val_frequency=1,
-        label_fowarding=False,
+        label_fowarding=True,
         weight_regularisation=True,
-        oversampling=False,
+        oversampling=True,
         oversample_ratio=1,
         learning_rate=0.0001,
         output_path="output")
