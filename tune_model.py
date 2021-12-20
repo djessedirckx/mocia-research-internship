@@ -9,12 +9,12 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from keras_tuner.oracles import BayesianOptimizationOracle
+from keras_tuner.oracles import RandomSearchOracle
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import Adam
 
-from analysis.test_metrics import compute_c_index_score, compute_calibration_curve
+from analysis.test_metrics import compute_c_index_score
 from util.training.oversampler import oversample_train_data
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
@@ -146,7 +146,7 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
         val_au_prcs = np.zeros(max_trials)
 
         # Configure search
-        tuner_oracle = BayesianOptimizationOracle(
+        tuner_oracle = RandomSearchOracle(
             objective=kt.Objective('val_convergence_metric', direction='max'),
             max_trials=max_trials,
             seed=42

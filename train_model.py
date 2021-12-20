@@ -134,7 +134,7 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
             fold_conv[cross_run] = evaluation_results[1]
 
             # Compute calibration curves
-            true_survival, pred_survival = compute_calibration_curve(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon, eval_time=3)
+            true_survival, pred_survival = compute_calibration_curve(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon, eval_time=eval_time)
             true_curves.append(true_survival)
             pred_curves.append(pred_survival)
 
@@ -204,5 +204,5 @@ if __name__ == '__main__':
         learning_rate=0.0001,
         output_path="output")
 
-    train_model(matchnet_config, batch_size=32)
+    train_model(matchnet_config, batch_size=32, eval_time=1)
 
