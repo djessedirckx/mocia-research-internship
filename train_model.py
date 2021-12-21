@@ -10,7 +10,7 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.optimizers import Adam
 
-from analysis.test_metrics import compute_c_index_score, compute_calibration_curve
+from analysis.test_metrics import compute_c_index_score, compute_calibration_curve, compute_brier_score
 from eda_preprocessing.DataPreprocessor import DataPreprocessor
 from eda_preprocessing.DataCreator import DataCreator
 from model.config.MatchNetConfig import MatchNetConfig
@@ -40,8 +40,8 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     ptids = np.array(ptids)
     
     # Get all possible l1, l2 combinations
-    l1 = [0.03]
-    l2 = [0.0001]
+    l1 = [0.01]
+    l2 = [0.03]
     combs = list(product(l1, l2))
 
     test_auroc = np.zeros(len(combs))
@@ -50,6 +50,8 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     test_c_idx = np.zeros(len(combs))
     test_auroc_std = np.zeros(len(combs))
     test_auprc_std = np.zeros(len(combs))
+    test_brier_score = np.zeros(len(combs))
+    test_brier_std = np.zeros(len(combs))
 
     test_true_curves = []
     test_pred_curves = []
@@ -67,6 +69,7 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
         fold_au_prcs = np.zeros(n_splits)
         fold_conv = np.zeros(n_splits)
         fold_c_index = np.zeros(n_splits)
+        fold_brier_score = np.zeros(n_splits)
         true_curves = []
         pred_curves = []
         for cross_run, (train_idx, test_idx) in enumerate(kfold.split(ptids, trajectory_labels)):
@@ -138,12 +141,17 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
             true_curves.append(true_survival)
             pred_curves.append(pred_survival)
 
+            # Compute Brier score
+            fold_brier_score[cross_run] = compute_brier_score(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon, eval_time=eval_time)
+
         test_auroc[i] = np.mean(fold_au_rocs)
         test_auprc[i] = np.mean(fold_au_prcs)
         test_auroc_std[i] = np.std(fold_au_rocs)
         test_auprc_std[i] = np.std(fold_au_prcs)
         test_conv[i] = np.mean(fold_conv)
         test_c_idx[i] = np.mean(fold_c_index)
+        test_brier_score[i] = np.mean(fold_brier_score)
+        test_brier_std[i] = np.std(fold_brier_score)
 
         true_curves = np.array(true_curves)
         pred_curves = np.array(pred_curves)
@@ -160,10 +168,12 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     best_pred_curve = test_pred_curves[best_index]
     c_index = test_c_idx[best_index]
 
+    print('========Evaluation results========')
     print(f'Best auroc: {auroc}, auprc: {auprc}, c-index: {c_index}, combination: {l1_l2_combination}')
     print(f'Test data auroc mean: {np.mean(test_auroc)}, std: {np.std(test_auroc)}')
     print(f'Test data auprc mean: {np.mean(test_auprc)}, std: {np.std(test_auprc)}')
     print(f'Test data c-index score mean: {np.mean(test_c_idx)}, std: {np.std(test_c_idx)}')
+    print(f'Test data brier score mean: {np.mean(test_brier_score)}, std: {np.std(test_brier_score)}\n')
 
     # Save best calibration plot
     plt.plot(best_pred_curve, best_true_curve, marker='o', label='Calibration curve')
@@ -188,11 +198,11 @@ if __name__ == '__main__':
         window_length=3,
         cov_filters=512,
         mask_filters=8,
-        cov_filter_size=10,
-        mask_filter_size=10,
+        cov_filter_size=5,
+        mask_filter_size=5,
         cov_input_features=35,
         mask_input_features=35,
-        dense_units=128,
+        dense_units=512,
         conv_blocks=1,
         dense_layers=1,
         dropout_rate=0.1,
@@ -204,5 +214,5 @@ if __name__ == '__main__':
         learning_rate=0.0001,
         output_path="output")
 
-    train_model(matchnet_config, batch_size=32, eval_time=1)
+    train_model(matchnet_config, batch_size=32, eval_time=3)
 

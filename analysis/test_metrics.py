@@ -109,14 +109,14 @@ def compute_calibration_curve(events: np.array, predictions: np.array, ptids: Li
     prob_at_eval_time = np.array(prob_at_eval_time)[sorted_index]
     ptids_at_eval_time = np.array(ptids_at_eval_time)[sorted_index]
 
-    # Split into 10 equally sized strata
-    prob_at_eval_time = np.array_split(prob_at_eval_time, 10)
-    ptids_at_eval_time = np.array_split(ptids_at_eval_time, 10)
+    # Split into 5 equally sized strata
+    prob_at_eval_time = np.array_split(prob_at_eval_time, 5)
+    ptids_at_eval_time = np.array_split(ptids_at_eval_time, 5)
 
-    return_true_probs = np.zeros(10)
-    return_pred_probs = np.zeros(10)
+    return_true_probs = np.zeros(5)
+    return_pred_probs = np.zeros(5)
 
-    for i in range(10):
+    for i in range(5):
         # Probability of not getting diagnosed
         pred_probs = 1 - prob_at_eval_time[i]
         patients = ptids_at_eval_time[i]
@@ -132,3 +132,27 @@ def compute_calibration_curve(events: np.array, predictions: np.array, ptids: Li
         return_pred_probs[i] = np.mean(pred_probs)
 
     return return_true_probs, return_pred_probs
+
+def compute_brier_score(events: np.array, predictions: np.array, ptids: List, true_labels: np.array, pred_horizon: int, eval_time: int) -> float:
+    # Restore timeline (in terms of prediction and observations)
+    if pred_horizon > 1:
+        predictions = np.stack(predictions, axis=1)
+    elif pred_horizon == 1:
+        predictions = np.expand_dims(predictions, axis=1)
+
+    true_times, _, true_censoring, _ = compute_survival_outcomes(events, predictions, ptids, true_labels, pred_horizon, ptids)
+
+    pred_trajectories, pred_labels = [], []
+    for patient in np.unique(ptids):
+        pt_idx = np.where(ptids == patient)[0]
+        _, pred_trajectory, pred_label = restore_trajectory(pt_idx, events, predictions, true_labels, pred_horizon, return_probs=True)
+        pred_trajectories.append(pred_trajectory)
+        pred_labels.append(pred_label)
+
+    brier_scores = np.zeros(len(true_times))
+    for i, (time, censoring, prediction, label) in enumerate(zip(true_times, true_censoring, pred_trajectories, pred_labels)):
+        y_true = ((time <= eval_time) * censoring).astype(float)
+        score = ((prediction - y_true)**2)[label.astype(bool)]
+        brier_scores[i] = np.mean(score)
+    
+    return np.mean(brier_scores)
