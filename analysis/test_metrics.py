@@ -5,6 +5,7 @@ import pandas as pd
 
 from lifelines import KaplanMeierFitter
 from lifelines.utils import concordance_index
+from sksurv.metrics import brier_score
 
 def restore_trajectory(pt_idx: List, events: np.array, predictions: np.array, true_labels: np.array, pred_horizon: int, return_probs: bool=False):
     pt_events = events[pt_idx]
@@ -134,14 +135,16 @@ def compute_calibration_curve(events: np.array, predictions: np.array, ptids: Li
     return return_true_probs, return_pred_probs
 
 def compute_brier_score(events: np.array, predictions: np.array, ptids: List, true_labels: np.array, pred_horizon: int, eval_time: int) -> float:
-    # Restore timeline (in terms of prediction and observations)
+
     if pred_horizon > 1:
         predictions = np.stack(predictions, axis=1)
     elif pred_horizon == 1:
         predictions = np.expand_dims(predictions, axis=1)
 
+    # Compute true survival times and detect whether trajectory is censored
     true_times, _, true_censoring, _ = compute_survival_outcomes(events, predictions, ptids, true_labels, pred_horizon, ptids)
 
+    # Restore sets of predictions (prediction horizons) into one trajectory per patients
     pred_trajectories, pred_labels = [], []
     for patient in np.unique(ptids):
         pt_idx = np.where(ptids == patient)[0]
@@ -149,10 +152,17 @@ def compute_brier_score(events: np.array, predictions: np.array, ptids: List, tr
         pred_trajectories.append(pred_trajectory)
         pred_labels.append(pred_label)
 
-    brier_scores = np.zeros(len(true_times))
-    for i, (time, censoring, prediction, label) in enumerate(zip(true_times, true_censoring, pred_trajectories, pred_labels)):
-        y_true = ((time <= eval_time) * censoring).astype(float)
-        score = ((prediction - y_true)**2)[label.astype(bool)]
-        brier_scores[i] = np.mean(score)
-    
-    return np.mean(brier_scores)
+    # Get all patients that are still part of the study at time of evaluation
+    cal_true_times, cal_cens, cal_preds = [], [], []
+    for time, censoring, prediction, label in zip(true_times, true_censoring, pred_trajectories, pred_labels):
+        if time >= eval_time and label[eval_time]: 
+            cal_true_times.append(time)
+            cal_cens.append(censoring)
+            cal_preds.append(prediction)
+
+    # Get predictions at eval_time and store true diagnosis/censoring time in desired format
+    cal_predictions = [p[eval_time] for p in cal_preds]
+    y = np.array(list(zip(cal_cens, cal_true_times)), dtype=[('cens', '?'), ('time', '<f8')])
+
+    # Compute and return brier score weighted for censoring
+    return brier_score(y, y, cal_predictions, eval_time)[1][0]
