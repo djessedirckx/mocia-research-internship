@@ -1,5 +1,6 @@
 from typing import List
 
+from keras_tuner.engine.tuner import Tuner
 import kerastuner as kt
 import numpy as np
 import pandas as pd
@@ -11,7 +12,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 from eda_preprocessing.DataCreator import DataCreator
 
 
-class MatchNetTuner(kt.Tuner):
+class MatchNetTuner(Tuner):
 
     def __init__(self, oracle, hypermodel, prediction_horizon, max_model_size=None, optimizer=None, loss=None, metrics=None, distribution_strategy=None, directory=None, project_name=None, logger=None, tuner_id=None, overwrite=False):
         super(MatchNetTuner, self).__init__(oracle, hypermodel, max_model_size=max_model_size, optimizer=optimizer, loss=loss, metrics=metrics,
