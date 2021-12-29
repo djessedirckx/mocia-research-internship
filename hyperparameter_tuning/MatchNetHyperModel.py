@@ -24,18 +24,18 @@ class MatchNetHyperModel(kt.HyperModel):
         window_length = hp.Choice('window_length', self.search_config.window_length)
 
         covariate_input = Input(shape=(window_length, self.matchnet_config.cov_input_shape[1]))
-        mask_input = Input(shape=(window_length, self.matchnet_config.mask_input_shape[1]))
+        # mask_input = Input(shape=(window_length, self.matchnet_config.mask_input_shape[1]))
 
         # Create the specified number of convolutional (parallel) streams
-        x_covariate, x_mask = covariate_input, mask_input
+        # x_covariate, x_mask = covariate_input, mask_input
+        x_covariate = covariate_input
         for _ in range(hp.Choice('conv_layers', self.search_config.conv_layers)):
 
             # Define hyperparameter selection ranges
             covariate_filters = hp.Choice('covariate_filters', self.search_config.covariate_filters)
-            mask_filters = hp.Choice('mask_filters', self.search_config.mask_filters)
+            # mask_filters = hp.Choice('mask_filters', self.search_config.mask_filters)
             conv_width = hp.Choice('conv_width', self.search_config.conv_filter_width)
 
-            
             # Create kernel_regulariser is desired
             if self.matchnet_config.weight_regularisation:
                 l1 = hp.Choice('l1', self.search_config.l1)
@@ -50,11 +50,11 @@ class MatchNetHyperModel(kt.HyperModel):
             x_covariate = Conv1D(filters=covariate_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_covariate)
             x_covariate = MCDropout(rate=dropout_rate)(x_covariate)    
 
-            x_mask = Conv1D(filters=mask_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_mask)
-            x_mask = MCDropout(rate=dropout_rate)(x_mask)
+            # x_mask = Conv1D(filters=mask_filters, kernel_size=conv_width, kernel_regularizer=kernel_regulariser, activation='relu', padding='causal')(x_mask)
+            # x_mask = MCDropout(rate=dropout_rate)(x_mask)
 
-            # Concatenate output from mask branch to main branch
-            x_covariate = Concatenate()([x_covariate, x_mask])
+            # # Concatenate output from mask branch to main branch
+            # x_covariate = Concatenate()([x_covariate, x_mask])
 
         # Dense layers
         x_covariate = Flatten()(x_covariate)
@@ -69,12 +69,13 @@ class MatchNetHyperModel(kt.HyperModel):
 
         # Define output layers based on specified prediction horizon
         output_layers = []
-        for i in range(self.matchnet_config.pred_horizon):
+        for _ in range(self.matchnet_config.pred_horizon):
             output = Dense(units=2, activation='softmax')(x_covariate)
             output_layers.append(output)
 
         # Construct and return model
-        model = MatchNet(inputs=[covariate_input, mask_input], outputs=output_layers, config=self.matchnet_config)
+        # model = MatchNet(inputs=[covariate_input, mask_input], outputs=output_layers, config=self.matchnet_config)
+        model = MatchNet(inputs=[covariate_input], outputs=output_layers, config=self.matchnet_config)
         optimizer = Adam(learning_rate=hp.Choice('lr_rate', self.search_config.lr))
         model.compile(optimizer)
         return model
