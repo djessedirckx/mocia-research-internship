@@ -67,7 +67,7 @@ class DataPreprocessor():
         non_truncated_events = original_df.loc[original_df['DX_bl'] != 'AD']
 
         # Select desired columns
-        desired_columns = ['PTID', 'DX', 'AGE', 'APOE4', 'PTEDUCAT', 'DX_bl', 'PTETHCAT', 'PTGENDER', 'PTMARRY',
+        desired_columns = ['PTID', 'DX', 'AGE', 'APOE4', 'PTEDUCAT', 'PTETHCAT', 'PTGENDER', 'PTMARRY',
                            'PTRACCAT', 'Entorhinal', 'Fusiform', 'Hippocampus', 'ICV', 'MidTemp', 'Ventricles',
                            'WholeBrain', 'ADAS11', 'ADAS13', 'CDRSB', 'MMSE', 'RAVLT_forgetting',
                            'RAVLT_immediate', 'RAVLT_learning', 'RAVLT_perc_forgetting', 'Month']
@@ -92,7 +92,7 @@ class DataPreprocessor():
         assert (missing_masks == 0).equals(feature_set.notnull()), 'Incorrect present values in masks'
 
         ohe_features = []
-        for column in feature_set.columns[3:8]:
+        for column in feature_set.columns[3:7]:
             one_hot = pd.get_dummies(feature_set[column], prefix=column, dummy_na=True)
 
             # Encode missing values as all ones
@@ -106,7 +106,7 @@ class DataPreprocessor():
         ohe_features = pd.concat(ohe_features, axis=1)
 
         # Drop categorical columns and insert one_hot encoded masks
-        missing_masks = missing_masks.drop(missing_masks.columns[3:8], axis=1)
+        missing_masks = missing_masks.drop(missing_masks.columns[3:7], axis=1)
         missing_masks = pd.concat([missing_masks.iloc[:, 0:3], ohe_features, missing_masks.iloc[:, 3:]], axis=1)
 
         return missing_masks
@@ -120,7 +120,7 @@ class DataPreprocessor():
                 method='ffill')
 
         # Fill remaining numerical column nan values with mean of all measurements
-        for column in feature_set.columns[np.r_[0, 2:3, 8:23]]:
+        for column in feature_set.columns[np.r_[0, 2:3, 7:22]]:
             feature_set[column].fillna(feature_set[column].mean(), inplace=True)
 
         # Apply data imputation on APOE4 column. Values are replaced based on their probability of occurence
@@ -146,15 +146,15 @@ class DataPreprocessor():
         print('Normalising and encoding data...')
         
         # Normalize numerical features
-        for column in feature_set.columns[np.r_[0:3, 8:23]]:
+        for column in feature_set.columns[np.r_[0:3, 7:22]]:
             feature_set[column] = (
                 feature_set[column] - feature_set[column].mean()) / feature_set[column].std()
 
         # One-hot encode categorical features
-        ohe_features = pd.concat([pd.get_dummies(feature_set[column], prefix=column) for column in feature_set.columns[3:8]], axis=1)
+        ohe_features = pd.concat([pd.get_dummies(feature_set[column], prefix=column) for column in feature_set.columns[3:7]], axis=1)
 
         # Drop categorical columns and insert one_encoded features
-        feature_set = feature_set.drop(feature_set.columns[3:8], axis=1)
+        feature_set = feature_set.drop(feature_set.columns[3:7], axis=1)
         feature_set = pd.concat([feature_set.iloc[:, 0:3], ohe_features, feature_set.iloc[:, 3:]], axis=1)
 
         return feature_set

@@ -157,8 +157,11 @@ def compute_brier_score(events: np.array, predictions: np.array, ptids: List, tr
     for time, censoring, prediction, label in zip(true_times, true_censoring, pred_trajectories, pred_labels):
         if time >= eval_time and label[eval_time]: 
             cal_true_times.append(time)
-            cal_cens.append(censoring)
-            cal_preds.append(prediction)
+
+            # brier_score implementation requires boolean that event happened (not censored) and 
+            # probability that event did not occur yet
+            cal_cens.append(not censoring)
+            cal_preds.append(1 - prediction)
 
     # Get predictions at eval_time and store true diagnosis/censoring time in desired format
     cal_predictions = [p[eval_time] for p in cal_preds]

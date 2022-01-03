@@ -1,3 +1,4 @@
+import argparse
 from itertools import product
 from typing import List
 
@@ -40,7 +41,7 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     ptids = np.array(ptids)
     
     # Get all possible l1, l2 combinations
-    l1 = [0.01]
+    l1 = [0.001]
     l2 = [0.03]
     combs = list(product(l1, l2))
 
@@ -193,26 +194,29 @@ def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_mask
     return data_creator.create_data(windows, masks, forwarded_indexes)
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Train Match-Net for a desired prediction horizon')
+    parser.add_argument('--eval_time', type=int, help='evaluation brier time')
+    args = parser.parse_args()
+
     matchnet_config = MatchNetConfig(
-        pred_horizon=1,
+        pred_horizon=3,
         window_length=3,
         cov_filters=512,
-        mask_filters=8,
-        cov_filter_size=5,
-        mask_filter_size=5,
+        mask_filters=64,
+        cov_filter_size=10,
+        mask_filter_size=10,
         cov_input_features=35,
         mask_input_features=35,
-        dense_units=512,
-        conv_blocks=1,
-        dense_layers=1,
+        dense_units=128,
+        conv_blocks=2,
+        dense_layers=2,
         dropout_rate=0.1,
-        val_frequency=1,
+        val_frequency=7,
         label_fowarding=True,
         weight_regularisation=True,
         oversampling=True,
-        oversample_ratio=1,
+        oversample_ratio=0.33,
         learning_rate=0.0001,
         output_path="output")
 
-    train_model(matchnet_config, batch_size=32, eval_time=3)
-
+    train_model(matchnet_config, batch_size=256, eval_time=args.eval_time)
