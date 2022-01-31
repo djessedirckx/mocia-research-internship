@@ -86,6 +86,9 @@ This repository contains multiple files. Below, the file structure is shown and 
 analysis
 - [test_metrics.py](analysis/test_metrics.py): Implementations for computing C-index, time-dependent Brier score, graphical calibration curves and survival function.
 
+config:
+- [run_randomsearch.sh](config/run_randomsearch.sh): Example configuration file to perform hyperparameter search on the Radboud University Data Science GPU cluster. More information about cluster can be found [here](https://wiki.cncz.science.ru.nl/Slurm).
+
 eda_preprocessing
 - [DataCreator.py](eda_preprocessing/DataCreator.py): Converts trajectories into sliding window and prediction horizon batches of desired size. 
 - [DataPreprocessor.py](eda_preprocessing/DataPreprocessor.py): Loads and preprocesses the Tadpole data set as presented in [1].
@@ -103,8 +106,10 @@ model
 - [MatchNet.py](model/MatchNet.py): Implementation of Match-Net train- and teststep, loss function and AUROC and AUPRC metric computations.
 - [model_builder.py](model/model_builder.py): Can be used to construct a Match-Net neural network, given the options specified in a [MatchNetConfig file](model/config/MatchNetConfig.py).
 
-root
+util/training
+- [oversampler.py](util/training/oversampler.py): Random oversampling implementation for oversampling trajecties that contain an Alzheimer's disease event for a specified oversample ratio.
 
+root
 - [train_model.py](train_model.py): Script for training the Match-Net model, given a specified configuration.
 - [tune_model.py](tune_model.py): Script for tuning the hyperparameters using a specified number of iterations of Random search.
 
