@@ -9,3 +9,4 @@ output
 .ipynb_checkpoints
 *.pyc
 trying_out
+.Rproj.user

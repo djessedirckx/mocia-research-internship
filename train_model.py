@@ -41,8 +41,8 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     ptids = np.array(ptids)
     
     # Get all possible l1, l2 combinations
-    l1 = [0.001]
-    l2 = [0.03]
+    l1 = [0.03]
+    l2 = [0.001]
     combs = list(product(l1, l2))
 
     test_auroc = np.zeros(len(combs))
@@ -138,7 +138,7 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
             fold_conv[cross_run] = evaluation_results[1]
 
             # Compute calibration curves
-            true_survival, pred_survival = compute_calibration_curve(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon, eval_time=eval_time)
+            true_survival, pred_survival, all_true_probs, all_pred_probs = compute_calibration_curve(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon, eval_time=eval_time)
             true_curves.append(true_survival)
             pred_curves.append(pred_survival)
 
@@ -181,6 +181,8 @@ def train_model(matchnet_config: MatchNetConfig, n_splits: int = 5, max_epochs: 
     plt.plot([0, 1], [0, 1], linestyle='--', c='black', label='Perfect calibration')
     plt.xlabel('Predicted probability')
     plt.ylabel('Observed probability')
+    plt.xlim(0.5, 1)
+    plt.ylim(0.5, 1)
     plt.title(f"Calibration curve at t={eval_time * 6 + 6} months")
     plt.legend()
 
@@ -195,28 +197,28 @@ def prepare_data(data_creator: DataCreator, study_df: pd.DataFrame, missing_mask
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train Match-Net for a desired prediction horizon')
-    parser.add_argument('--eval_time', type=int, help='evaluation brier time')
+    parser.add_argument('--eval_time', type=int, help='Brier evaluation time')
     args = parser.parse_args()
 
     matchnet_config = MatchNetConfig(
-        pred_horizon=3,
-        window_length=3,
+        pred_horizon=1,
+        window_length=5,
         cov_filters=512,
-        mask_filters=64,
-        cov_filter_size=10,
-        mask_filter_size=10,
+        mask_filters=8,
+        cov_filter_size=6,
+        mask_filter_size=6,
         cov_input_features=35,
         mask_input_features=35,
-        dense_units=128,
-        conv_blocks=2,
-        dense_layers=2,
+        dense_units=256,
+        conv_blocks=1,
+        dense_layers=1,
         dropout_rate=0.1,
         val_frequency=7,
         label_fowarding=True,
-        weight_regularisation=True,
+        weight_regularisation=False,
         oversampling=True,
         oversample_ratio=0.33,
         learning_rate=0.0001,
-        output_path="output")
+        output_path="output/oversampl_forwarding")
 
-    train_model(matchnet_config, batch_size=256, eval_time=args.eval_time)
+    train_model(matchnet_config, batch_size=32, eval_time=1)

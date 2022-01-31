@@ -99,12 +99,14 @@ def compute_calibration_curve(events: np.array, predictions: np.array, ptids: Li
     for patient in np.unique(ptids):
         pt_idx = np.where(ptids == patient)[0]
         true_probs, pred_probs, pt_true_labels = restore_trajectory(pt_idx, events, predictions, true_labels, pred_horizon, return_probs=True)
-        
+
         # Only include patients that are still in the study at this point and whose predictions
         # at time of evaluation are not imputed
         if len(true_probs) >= eval_time + 1 and pt_true_labels[eval_time]:
             prob_at_eval_time.append(pred_probs[eval_time])
             ptids_at_eval_time.append(patient)
+
+    true_times, _, true_censoring, _ = compute_survival_outcomes(events, predictions, ptids, true_labels, pred_horizon, ptids)
 
     sorted_index = np.argsort(prob_at_eval_time)
     prob_at_eval_time = np.array(prob_at_eval_time)[sorted_index]
@@ -133,7 +135,7 @@ def compute_calibration_curve(events: np.array, predictions: np.array, ptids: Li
         return_pred_probs[i] = np.mean(pred_probs)
 
     return return_true_probs, return_pred_probs
-
+    
 def compute_brier_score(events: np.array, predictions: np.array, ptids: List, true_labels: np.array, pred_horizon: int, eval_time: int) -> float:
 
     if pred_horizon > 1:

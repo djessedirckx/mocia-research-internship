@@ -59,25 +59,20 @@ def retrain_best_model(pred_horizon: int, hyper_parameters: kt.HyperParameters, 
         l1 = hyper_parameters.values['l1']
         l2 = hyper_parameters.values['l2']
 
-    # train_data = [train_windows, train_masks]
-    train_data = train_windows
+    train_data = [train_windows, train_masks]
     train_labels = train_measurement_labels
-    # validation_data = [val_windows, val_masks]
-    validation_data = val_windows
+    validation_data = [val_windows, val_masks]
     validation_labels = val_measurement_labels
 
     model_config = MatchNetConfig(
         pred_horizon,
         hyper_parameters.values['window_length'],
         hyper_parameters.values['covariate_filters'],
-        # hyper_parameters.values['mask_filters'],
-        0,
+        hyper_parameters.values['mask_filters'],
         hyper_parameters.values['conv_width'],
         hyper_parameters.values['conv_width'],
-        # 35,
-        # 35,
-        39,
-        39,
+        35,
+        35,
         hyper_parameters.values['dense_units'],
         hyper_parameters.values['conv_layers'],
         hyper_parameters.values['dense_layers'],
@@ -197,10 +192,8 @@ def random_search(matchnet_config: MatchNetConfig, n_splits: int = 5, max_trials
 
         # Evaluate best model on test data
         test_lengths = median_traj_length / test_lengths
-        # evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels, test_lengths], batch_size=len(test_true_labels))
-        evaluation_results = best_model.evaluate([test_windows], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels, test_lengths], batch_size=len(test_true_labels))
-        # evaluation_predictions = best_model.predict_on_batch([test_windows, test_masks])
-        evaluation_predictions = best_model.predict_on_batch([test_windows])
+        evaluation_results = best_model.evaluate([test_windows, test_masks], test_measurement_labels, sample_weight=[test_true_labels, test_metric_labels, test_lengths], batch_size=len(test_true_labels))
+        evaluation_predictions = best_model.predict_on_batch([test_windows, test_masks])
         test_c_idx[cross_run] = compute_c_index_score(test_measurement_labels, evaluation_predictions, test_patients, test_metric_labels, pred_horizon=matchnet_config.pred_horizon)
 
         test_au_rocs[cross_run] = evaluation_results[3]
@@ -242,8 +235,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     matchnet_config= MatchNetConfig(
-        cov_input_features=39,
-        mask_input_features=39,
+        cov_input_features=35,
+        mask_input_features=35,
         pred_horizon = args.prediction_horizon,
         output_path='/ceph/csedu-scratch/project/ddirckx/random_search',
         label_fowarding=args.label_forwarding,
